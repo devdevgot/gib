@@ -40,4 +40,4 @@ class ExplainWorkflow(BaseWorkflow):
         g.add_edge("context_builder", "explainer")
         g.add_edge("explainer", END)
 
-        return g.compile()
+        return g

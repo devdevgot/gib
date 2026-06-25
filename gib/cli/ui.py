@@ -143,6 +143,20 @@ def spinner(message: str) -> Generator[None, None, None]:
         yield
 
 
+def print_credits_paused(message: str) -> None:
+    from rich.panel import Panel
+
+    console.print()
+    console.print(Panel(
+        f"{message}\n\n"
+        "[bold]Прогресс сохранён.[/] После пополнения кредитов на OpenRouter выполните:\n"
+        "  [cyan]gib resume[/]           — продолжить последнюю задачу\n"
+        "  [cyan]gib resume --list[/]    — список приостановленных задач",
+        title="[bold red]Кредиты OpenRouter закончились[/]",
+        border_style="red",
+    ))
+
+
 def print_error(message: str) -> None:
     console.print(f"[error]✗ {message}[/]")
 

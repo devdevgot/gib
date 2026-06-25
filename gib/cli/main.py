@@ -22,12 +22,19 @@ app = typer.Typer(
 # Known subcommands — used by the entrypoint wrapper to route correctly
 _SUBCOMMANDS = {
     "review", "fix", "refactor", "commit", "doctor",
-    "explain", "test", "docs", "watch", "chat",
+    "explain", "test", "docs", "watch", "chat", "resume",
 }
 
 
 def _run(coro):
-    return asyncio.run(coro)
+    from gib.providers.errors import CreditsExhaustedError
+    from gib.cli import ui
+
+    try:
+        return asyncio.run(coro)
+    except CreditsExhaustedError as e:
+        ui.print_credits_paused(str(e))
+        raise typer.Exit(2) from e
 
 
 def _get_orchestrator():
@@ -114,6 +121,7 @@ def _print_help() -> None:
         "  [cyan]gib explain <путь>[/]    [dim]Объяснить код[/]\n"
         "  [cyan]gib watch [папка][/]     [dim]Слежение за файлами[/]\n"
         "  [cyan]gib chat[/]              [dim]Интерактивный чат[/]\n"
+        "  [cyan]gib resume[/]           [dim]Продолжить после нехватки кредитов[/]\n"
         "  [cyan]gib set-key[/]           [dim]Изменить API ключ[/]",
         border_style="cyan",
         title="[bold]gib[/]",
@@ -407,6 +415,51 @@ def cmd_chat() -> None:
     _ensure_api_key()
     from gib.cli.chat import start_chat
     _run(start_chat())
+
+
+# ─────────────────────────────────────────────────────────────
+# gib resume
+# ─────────────────────────────────────────────────────────────
+
+@app.command("resume")
+def cmd_resume(
+    thread_id: Annotated[
+        Optional[str],
+        typer.Option("--id", help="Thread ID paused run to resume"),
+    ] = None,
+    list_runs: Annotated[
+        bool,
+        typer.Option("--list", "-l", help="List paused workflows"),
+    ] = False,
+) -> None:
+    """Resume a workflow paused due to exhausted OpenRouter credits."""
+    _ensure_api_key()
+    from gib.cli import ui
+
+    orch = _get_orchestrator()
+
+    if list_runs:
+        runs = orch.list_paused_runs()
+        if not runs:
+            console.print("[dim]Нет приостановленных задач для этого проекта.[/]")
+            raise typer.Exit()
+        console.print("[bold]Приостановленные задачи:[/]\n")
+        for run in runs:
+            ts = run.updated_at.strftime("%Y-%m-%d %H:%M") if run.updated_at else "?"
+            console.print(
+                f"  [cyan]{run.thread_id[:8]}…[/]  [dim]{ts}[/]  "
+                f"[bold]{run.workflow_type}[/]  {run.user_request[:60]}"
+            )
+        console.print("\n[dim]Продолжить:[/] [cyan]gib resume --id <thread_id>[/]")
+        raise typer.Exit()
+
+    async def _run_it():
+        with ui.spinner("[cyan]Возобновляю задачу с последнего checkpoint..."):
+            result = await orch.run_resume(thread_id)
+        ui.print_project_info(result)
+        ui.print_result(result)
+
+    _run(_run_it())
 
 
 @app.command("set-key")

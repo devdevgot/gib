@@ -62,6 +62,7 @@ class AgentsConfig(BaseModel):
 class MemoryConfig(BaseModel):
     db_path: str = "~/.gib/memory.db"
     max_history: int = 1000
+    checkpoint_db_path: str = "~/.gib/checkpoints.db"
 
 
 class SecurityConfig(BaseModel):
@@ -122,6 +123,11 @@ class Config(BaseModel):
 
     def memory_db_path(self) -> Path:
         path = Path(self.memory.db_path).expanduser()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def checkpoint_db_path(self) -> Path:
+        path = Path(self.memory.checkpoint_db_path).expanduser()
         path.parent.mkdir(parents=True, exist_ok=True)
         return path
 

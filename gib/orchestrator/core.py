@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,7 @@ from gib.core.types import WorkflowType
 from gib.graph.registry import WorkflowRegistry
 from gib.memory import MemoryStore
 from gib.memory.context import build_project_memory_context, extract_task_summary
+from gib.providers.errors import CreditsExhaustedError
 from gib.router import ModelRouter, TaskType
 from gib.utils import get_logger
 from gib.workspace import ProjectProfile
@@ -170,10 +172,48 @@ class Orchestrator:
         user_request: str,
         target_paths: list[str] | None = None,
         error_input: str = "",
+        *,
+        task_type: str = "",
+        thread_id: str | None = None,
+        resume: bool = False,
     ) -> tuple[GibState, ProjectProfile | None]:
-        """Запускает workflow и возвращает финальное состояние."""
+        """Запускает workflow с checkpoint; при нехватке кредитов сохраняет прогресс."""
         profile = await self._get_profile()
+
+        if resume:
+            if not thread_id:
+                raise ValueError("thread_id is required to resume a workflow")
+            run = self._memory.get_workflow_run(thread_id)
+            if not run:
+                raise ValueError(f"Workflow run not found: {thread_id}")
+            if run.status != "paused_credits":
+                raise ValueError(f"Run {thread_id} is not paused (status={run.status})")
+            workflow_type = WorkflowType(run.workflow_type)
+            try:
+                final_state = await WorkflowRegistry.run(
+                    workflow_type,
+                    {},
+                    thread_id=thread_id,
+                    resume=True,
+                )
+                self._memory.complete_workflow_run(thread_id)
+                return final_state, profile
+            except CreditsExhaustedError as e:
+                self._memory.pause_workflow_run(thread_id, str(e))
+                raise
+            except Exception as e:
+                self._memory.fail_workflow_run(thread_id, str(e))
+                raise
+
         session_context = self._build_session_context()
+        thread_id = thread_id or str(uuid.uuid4())
+        self._memory.create_workflow_run(
+            thread_id=thread_id,
+            workflow_type=workflow_type.value,
+            user_request=user_request,
+            project_path=str(self.root),
+            task_type=task_type,
+        )
 
         initial = make_initial_state(
             user_request=user_request,
@@ -184,8 +224,21 @@ class Orchestrator:
         )
         initial["session_context"] = session_context
 
-        final_state = await WorkflowRegistry.run(workflow_type, initial)
-        return final_state, profile
+        try:
+            final_state = await WorkflowRegistry.run(
+                workflow_type,
+                initial,
+                thread_id=thread_id,
+                resume=False,
+            )
+            self._memory.complete_workflow_run(thread_id)
+            return final_state, profile
+        except CreditsExhaustedError as e:
+            self._memory.pause_workflow_run(thread_id, str(e))
+            raise
+        except Exception as e:
+            self._memory.fail_workflow_run(thread_id, str(e))
+            raise
 
     def _persist(
         self,
@@ -211,7 +264,7 @@ class Orchestrator:
         """gib ask — Feature workflow."""
         start = time.monotonic()
         final_state, profile = await self._run_workflow(
-            WorkflowType.FEATURE, prompt
+            WorkflowType.FEATURE, prompt, task_type=str(TaskType.GENERAL)
         )
         elapsed = int((time.monotonic() - start) * 1000)
         self._persist(str(TaskType.GENERAL), prompt, final_state)
@@ -250,6 +303,7 @@ class Orchestrator:
             user_request,
             target_paths=path_strs,
             error_input=error,
+            task_type=str(TaskType.FIX),
         )
         elapsed = int((time.monotonic() - start) * 1000)
         self._persist(str(TaskType.FIX), "fix code", final_state)
@@ -264,6 +318,7 @@ class Orchestrator:
             WorkflowType.REFACTOR,
             f"Рефакторинг файлов: {path_str}",
             target_paths=path_strs,
+            task_type=str(TaskType.REFACTOR),
         )
         elapsed = int((time.monotonic() - start) * 1000)
         self._persist(str(TaskType.REFACTOR), f"refactor {path_str}", final_state)
@@ -280,6 +335,7 @@ class Orchestrator:
             WorkflowType.REVIEW,
             "Провести code review",
             target_paths=path_strs,
+            task_type=str(TaskType.REVIEW),
         )
         elapsed = int((time.monotonic() - start) * 1000)
         self._persist(str(TaskType.REVIEW), "code review", final_state)
@@ -292,6 +348,7 @@ class Orchestrator:
             WorkflowType.EXPLAIN,
             f"Объясни код в {path}",
             target_paths=[str(path)],
+            task_type=str(TaskType.EXPLAIN),
         )
         elapsed = int((time.monotonic() - start) * 1000)
         self._persist(str(TaskType.EXPLAIN), f"explain {path}", final_state)
@@ -303,6 +360,7 @@ class Orchestrator:
         final_state, profile = await self._run_workflow(
             WorkflowType.DOCTOR,
             "Полная диагностика проекта",
+            task_type=str(TaskType.DOCTOR),
         )
         elapsed = int((time.monotonic() - start) * 1000)
         self._persist(str(TaskType.DOCTOR), "doctor", final_state)
@@ -316,6 +374,7 @@ class Orchestrator:
             WorkflowType.FEATURE,
             "Написать тесты для кода",
             target_paths=path_strs,
+            task_type=str(TaskType.TEST),
         )
         elapsed = int((time.monotonic() - start) * 1000)
         self._persist(str(TaskType.TEST), "generate tests", final_state)
@@ -329,10 +388,37 @@ class Orchestrator:
             WorkflowType.FEATURE,
             "Написать документацию для кода",
             target_paths=path_strs,
+            task_type=str(TaskType.DOCS),
         )
         elapsed = int((time.monotonic() - start) * 1000)
         self._persist(str(TaskType.DOCS), "generate docs", final_state)
         return _state_to_result(final_state, str(TaskType.DOCS), elapsed, profile)
+
+    def list_paused_runs(self):
+        """Список приостановленных workflow для текущего проекта."""
+        return self._memory.list_paused_runs(str(self.root))
+
+    async def run_resume(self, thread_id: str | None = None) -> OrchestratorResult:
+        """Продолжить workflow после пополнения кредитов OpenRouter."""
+        run = (
+            self._memory.get_workflow_run(thread_id)
+            if thread_id
+            else self._memory.get_latest_paused_run(str(self.root))
+        )
+        if not run:
+            raise ValueError("No paused workflow found for this project")
+
+        start = time.monotonic()
+        final_state, profile = await self._run_workflow(
+            WorkflowType(run.workflow_type),
+            run.user_request,
+            resume=True,
+            thread_id=run.thread_id,
+        )
+        elapsed = int((time.monotonic() - start) * 1000)
+        task_type = run.task_type or run.workflow_type
+        self._persist(task_type, run.user_request, final_state)
+        return _state_to_result(final_state, task_type, elapsed, profile)
 
     async def run_commit(self) -> OrchestratorResult:
         """gib commit — генерирует сообщение коммита (без workflow, прямой вызов)."""

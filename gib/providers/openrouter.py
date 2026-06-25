@@ -8,6 +8,7 @@ import httpx
 from pydantic import BaseModel
 
 from gib.config import get_config
+from gib.providers.errors import CreditsExhaustedError, is_credits_error
 from gib.utils import get_logger
 
 logger = get_logger("gib.providers.openrouter")
@@ -128,22 +129,27 @@ class OpenRouterClient:
 
             except httpx.HTTPStatusError as e:
                 last_error = e
-                attempt += 1
-                # Log the actual response body so we know WHY it failed
                 try:
                     body = e.response.json()
                 except Exception:
                     body = e.response.text
                 logger.warning(
                     "OpenRouter request failed (attempt %d): %s\nModel: %s\nResponse: %s",
-                    attempt, e, resolved_model, body,
+                    attempt + 1, e, resolved_model, body,
                 )
+                if is_credits_error(e.response.status_code, body):
+                    raise CreditsExhaustedError(
+                        "OpenRouter credits exhausted. Top up your balance and run: gib resume",
+                        status_code=e.response.status_code,
+                        details=body,
+                    ) from e
                 # 400 with this model slug — don't retry, fail fast
                 if e.response.status_code == 400:
                     raise RuntimeError(
                         f"OpenRouter 400 Bad Request for model '{resolved_model}'.\n"
                         f"Details: {body}"
                     ) from e
+                attempt += 1
                 if attempt >= self._config.openrouter.max_retries:
                     break
             except httpx.RequestError as e:

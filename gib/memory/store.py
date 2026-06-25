@@ -69,6 +69,23 @@ class ProjectProfile(Base):
     profile_json = Column(Text, default="{}")  # language, framework, stack, etc.
 
 
+class WorkflowRunRecord(Base):
+    """Paused / in-progress workflow runs for credit-resume."""
+
+    __tablename__ = "workflow_runs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    thread_id = Column(String(64), unique=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    project_path = Column(String(512), nullable=False)
+    workflow_type = Column(String(32), nullable=False)
+    user_request = Column(Text, nullable=False)
+    task_type = Column(String(64), nullable=True)
+    status = Column(String(32), default="running")  # running | paused_credits | completed | failed
+    error_message = Column(Text, nullable=True)
+
+
 class MemoryStore:
     """Manages all persistent memory for GIB."""
 
@@ -252,3 +269,82 @@ class MemoryStore:
                 if record:
                     return json.loads(record.profile_json or "{}")
             return {}
+
+    # ── Workflow runs (credit pause / resume) ─────────────────────────────────
+
+    def create_workflow_run(
+        self,
+        thread_id: str,
+        workflow_type: str,
+        user_request: str,
+        project_path: str,
+        task_type: str = "",
+    ) -> WorkflowRunRecord:
+        norm = normalize_project_path(project_path) or project_path
+        with Session(self._engine) as session:
+            record = WorkflowRunRecord(
+                thread_id=thread_id,
+                workflow_type=workflow_type,
+                user_request=user_request[:8000],
+                project_path=norm,
+                task_type=task_type,
+                status="running",
+            )
+            session.add(record)
+            session.commit()
+            session.refresh(record)
+            return record
+
+    def pause_workflow_run(self, thread_id: str, error_message: str = "") -> None:
+        with Session(self._engine) as session:
+            record = session.scalar(
+                select(WorkflowRunRecord).where(WorkflowRunRecord.thread_id == thread_id)
+            )
+            if record:
+                record.status = "paused_credits"
+                record.error_message = error_message[:4000]
+                record.updated_at = datetime.utcnow()
+                session.commit()
+
+    def complete_workflow_run(self, thread_id: str) -> None:
+        with Session(self._engine) as session:
+            record = session.scalar(
+                select(WorkflowRunRecord).where(WorkflowRunRecord.thread_id == thread_id)
+            )
+            if record:
+                record.status = "completed"
+                record.updated_at = datetime.utcnow()
+                session.commit()
+
+    def fail_workflow_run(self, thread_id: str, error_message: str = "") -> None:
+        with Session(self._engine) as session:
+            record = session.scalar(
+                select(WorkflowRunRecord).where(WorkflowRunRecord.thread_id == thread_id)
+            )
+            if record:
+                record.status = "failed"
+                record.error_message = error_message[:4000]
+                record.updated_at = datetime.utcnow()
+                session.commit()
+
+    def get_workflow_run(self, thread_id: str) -> WorkflowRunRecord | None:
+        with Session(self._engine) as session:
+            return session.scalar(
+                select(WorkflowRunRecord).where(WorkflowRunRecord.thread_id == thread_id)
+            )
+
+    def list_paused_runs(self, project_path: str = "") -> list[WorkflowRunRecord]:
+        norm = normalize_project_path(project_path)
+        with Session(self._engine) as session:
+            stmt = (
+                select(WorkflowRunRecord)
+                .where(WorkflowRunRecord.status == "paused_credits")
+                .order_by(desc(WorkflowRunRecord.updated_at))
+            )
+            if norm:
+                stmt = stmt.where(WorkflowRunRecord.project_path == norm)
+            return list(session.scalars(stmt))
+
+    def get_latest_paused_run(self, project_path: str = "") -> WorkflowRunRecord | None:
+        runs = self.list_paused_runs(project_path)
+        return runs[0] if runs else None

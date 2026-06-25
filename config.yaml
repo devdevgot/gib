@@ -75,6 +75,7 @@ agents:
 
 memory:
   db_path: "~/.gib/memory.db"
+  checkpoint_db_path: "~/.gib/checkpoints.db"
   max_history: 1000
 
 ui:

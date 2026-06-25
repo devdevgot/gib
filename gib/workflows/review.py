@@ -37,4 +37,4 @@ class ReviewWorkflow(BaseWorkflow):
         g.add_edge("reviewer", "security")
         g.add_edge("security", END)
 
-        return g.compile()
+        return g

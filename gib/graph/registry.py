@@ -68,11 +68,21 @@ class WorkflowRegistry:
         return list(_REGISTRY.keys())
 
     @staticmethod
-    async def run(workflow_type: str | WorkflowType, initial_state: dict) -> dict:
+    async def run(
+        workflow_type: str | WorkflowType,
+        initial_state: dict,
+        *,
+        thread_id: str | None = None,
+        resume: bool = False,
+    ) -> dict:
         """Запускает workflow и возвращает финальное состояние."""
         _load_all()
         workflow_cls = WorkflowRegistry.get(workflow_type)
-        return await workflow_cls.run(initial_state)
+        return await workflow_cls.run(
+            initial_state,
+            thread_id=thread_id,
+            resume=resume,
+        )
 
 
 def get_workflow(workflow_type: str | WorkflowType) -> type[BaseWorkflow]:

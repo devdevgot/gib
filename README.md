@@ -14,19 +14,20 @@ gib                              # первый запуск попросит AP
 **Обновление до последней версии:**
 
 ```bash
-# Удалить старую pip-установку, если была (частая причина версии 0.1.0)
 pip uninstall gib -y 2>/dev/null || true
-
 pipx install --force git+https://github.com/devdevgot/gib.git@main
-hash -r   # bash: обновить кэш PATH
-gib --version   # должно быть gib 0.1.2
+hash -r
+gib --version
 ```
 
-Если версия всё ещё старая — проверьте, какой бинарник запускается:
+**Если закончились кредиты OpenRouter:**
+
+GIB сохраняет прогресс workflow в checkpoint. После пополнения:
 
 ```bash
-which -a gib
-pipx list
+gib resume              # продолжить последнюю приостановленную задачу
+gib resume --list       # список приостановленных задач
+gib resume --id <uuid>  # продолжить конкретную задачу
 ```
 
 Или вручную задать ключ:

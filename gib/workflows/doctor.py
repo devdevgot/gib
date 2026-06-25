@@ -92,4 +92,4 @@ class DoctorWorkflow(BaseWorkflow):
 
         g.add_edge("doctor_merge", END)
 
-        return g.compile()
+        return g

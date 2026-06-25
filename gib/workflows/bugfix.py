@@ -74,4 +74,4 @@ class BugFixWorkflow(BaseWorkflow):
 
         g.add_edge("git", END)
 
-        return g.compile()
+        return g
