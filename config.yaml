@@ -1,0 +1,77 @@
+# GIB Configuration
+openrouter:
+  base_url: "https://openrouter.ai/api/v1"
+  timeout: 120
+  max_retries: 3
+
+models:
+  default: "anthropic/claude-sonnet-4.5"
+  fast: "google/gemini-2.5-flash"
+  cheap: "deepseek/deepseek-v3.2"
+  large_context: "google/gemini-2.5-pro"
+  code: "anthropic/claude-sonnet-4.5"
+  docs: "google/gemini-2.5-flash"
+  tests: "deepseek/deepseek-v3.2"
+
+routing:
+  rules:
+    - task_type: "architecture"
+      model: "anthropic/claude-sonnet-4.5"
+      reason: "Best for system design"
+    - task_type: "refactor"
+      model: "anthropic/claude-sonnet-4.5"
+      reason: "Best for large refactors"
+    - task_type: "docs"
+      model: "google/gemini-2.5-flash"
+      reason: "Fast and good for documentation"
+    - task_type: "test"
+      model: "deepseek/deepseek-v3.2"
+      reason: "Cost-efficient for test generation"
+    - task_type: "review"
+      model: "anthropic/claude-sonnet-4.5"
+      reason: "Best for code review"
+    - task_type: "fix"
+      model: "anthropic/claude-sonnet-4.5"
+      reason: "Best for bug fixing"
+    - task_type: "commit"
+      model: "google/gemini-2.5-flash"
+      reason: "Fast for commit messages"
+    - task_type: "explain"
+      model: "anthropic/claude-sonnet-4.5"
+      reason: "Best for explanations"
+    - task_type: "doctor"
+      model: "anthropic/claude-sonnet-4.5"
+      reason: "Best for code analysis"
+    - task_type: "general"
+      model: "anthropic/claude-sonnet-4.5"
+      reason: "Default for general tasks"
+    - task_type: "watch"
+      model: "google/gemini-2.5-flash"
+      reason: "Fast for live feedback"
+    - task_type: "chat"
+      model: "anthropic/claude-sonnet-4.5"
+      reason: "Best for interactive chat"
+
+agents:
+  max_parallel: 4
+  timeout: 300
+
+memory:
+  db_path: "~/.gib/memory.db"
+  max_history: 1000
+
+ui:
+  show_cost: true
+  show_time: true
+  show_model: true
+  show_agents: true
+  theme: "dark"
+
+security:
+  auto_apply: false
+  require_confirmation: true
+  show_diff: true
+
+logging:
+  level: "INFO"
+  log_dir: "~/.gib/logs"
