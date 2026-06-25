@@ -66,24 +66,62 @@ def _extract_verdict(text: str) -> tuple[ReviewVerdict, list[str]]:
     return verdict, comments[:20]  # макс 20 замечаний
 
 
+def _format_chunk(chunk: dict[str, str]) -> str:
+    """Форматирует батч файлов для LLM."""
+    parts = []
+    for path, content in chunk.items():
+        parts.append(f"### {path}\n```\n{content}\n```")
+    return "\n\n".join(parts)
+
+
+def _build_chunk_prompt(chunk: dict[str, str], chunk_idx: int, total: int, context: str) -> str:
+    header = f"## Code Review — Batch {chunk_idx}/{total}\n"
+    if context:
+        header += f"\nProject context:\n{context[:500]}\n"
+    header += f"\nReview these files ({len(chunk)} files):\n\n"
+    return header + _format_chunk(chunk)
+
+
+def _build_merge_prompt(partial_reviews: list[str], project_context: str) -> str:
+    parts = [
+        "## Merge Partial Code Reviews into One Final Report\n",
+        f"Project: {project_context[:300]}\n",
+        f"Total batches reviewed: {len(partial_reviews)}\n\n",
+    ]
+    for i, review in enumerate(partial_reviews, 1):
+        parts.append(f"### Batch {i} Review\n{review}\n")
+    parts.append(
+        "\n## Your Task\n"
+        "Consolidate all findings into ONE final report:\n"
+        "1. Start with overall verdict: ✅ APPROVED / ⚠️ NEEDS_FIX / ❌ REJECTED\n"
+        "2. Deduplicate — merge similar issues from different batches\n"
+        "3. Prioritize: CRITICAL > HIGH > MEDIUM > LOW\n"
+        "4. Include file references for each issue\n"
+        "5. End with a summary of the most important fixes needed\n"
+    )
+    return "\n".join(parts)
+
+
 def _build_reviewer_prompt(state: GibState) -> str:
+    """Для не-review workflow (inline review после генерации кода)."""
     code = state.get("code_result", "")
     arch = state.get("architecture_result", "")
     research = state.get("research_result", "")
     iteration = state.get("review_iteration", 1)
     files = state.get("file_contents", {})
 
-    parts = [
-        f"## Task Being Reviewed\n{state.get('user_request', '')}",
-    ]
+    parts = [f"## Task Being Reviewed\n{state.get('user_request', '')}"]
 
     if arch:
         parts.append(f"\n## Architecture Design\n{arch[:2000]}")
     if code:
         parts.append(f"\n## Implementation to Review\n{code[:8000]}")
+    elif files:
+        # Нет code_result — используем file_contents
+        files_text = _format_chunk(dict(list(files.items())[:10]))
+        parts.append(f"\n## Files to Review\n{files_text}")
     if research:
         parts.append(f"\n## Research Context\n{research[:1500]}")
-
     if iteration > 1:
         parts.append(f"\n⚠️ This is iteration {iteration} — previous review found issues.")
 
@@ -93,6 +131,10 @@ def _build_reviewer_prompt(state: GibState) -> str:
 async def node_reviewer(state: GibState) -> dict:
     """
     LangGraph Node: Claude проводит код-ревью.
+
+    Если в metadata есть review_chunks (review/doctor workflow) —
+    анализирует каждый батч отдельно, затем мержит в финальный отчёт.
+    Иначе — стандартный inline review после генерации кода.
     """
     container = Container.instance()
     client = container.openrouter_client()
@@ -103,45 +145,131 @@ async def node_reviewer(state: GibState) -> dict:
         AgentRole.REVIEWER.value,
         router.select_model(TaskType.REVIEW)
     )
-    prompt = _build_reviewer_prompt(state)
     iteration = state.get("review_iteration", 1)
 
-    logger.info("[reviewer] Ревью итерация=%d, модель=%s", iteration, model)
+    # Проверяем наличие батчей для chunked review
+    metadata = state.get("metadata", {})
+    chunks: list[dict[str, str]] = metadata.get("review_chunks", [])
 
-    resp = await client.chat(
-        [
-            ChatMessage(role="system", content=_REVIEWER_SYSTEM),
-            ChatMessage(role="user", content=prompt),
-        ],
-        model=model,
-        temperature=0.1,
-        max_tokens=6144,
-    )
+    total_cost = 0.0
+    total_latency = 0
+    models_used: list[str] = []
 
-    verdict, comments = _extract_verdict(resp.content)
+    if chunks and len(chunks) > 1:
+        # ── Chunked review: анализируем батч за батчем ──────────────────────
+        project_info = (
+            f"Language: {state.get('project_context', {}).get('language', 'Unknown')}\n"
+            f"Frameworks: {state.get('project_context', {}).get('frameworks', [])}\n"
+            f"Request: {state.get('user_request', '')}"
+        )
+        logger.info("[reviewer] Chunked review: %d батчей, модель=%s", len(chunks), model)
+
+        partial_reviews: list[str] = []
+        for idx, chunk in enumerate(chunks, 1):
+            if not chunk:
+                continue
+            chunk_prompt = _build_chunk_prompt(chunk, idx, len(chunks), project_info)
+            logger.info("[reviewer] Батч %d/%d (%d файлов)...", idx, len(chunks), len(chunk))
+
+            resp = await client.chat(
+                [
+                    ChatMessage(role="system", content=_REVIEWER_SYSTEM),
+                    ChatMessage(role="user", content=chunk_prompt),
+                ],
+                model=model,
+                temperature=0.1,
+                max_tokens=4096,
+            )
+            partial_reviews.append(resp.content)
+            total_cost += resp.cost_usd
+            total_latency += resp.latency_ms
+            models_used.append(resp.model)
+
+        # Мержим в финальный отчёт
+        logger.info("[reviewer] Мержу %d частичных ревью...", len(partial_reviews))
+        if len(partial_reviews) == 1:
+            final_review = partial_reviews[0]
+            merge_resp_model = models_used[0]
+        else:
+            merge_prompt = _build_merge_prompt(partial_reviews, project_info)
+            merge_resp = await client.chat(
+                [
+                    ChatMessage(role="system", content=_REVIEWER_SYSTEM),
+                    ChatMessage(role="user", content=merge_prompt),
+                ],
+                model=model,
+                temperature=0.1,
+                max_tokens=6144,
+            )
+            final_review = merge_resp.content
+            total_cost += merge_resp.cost_usd
+            total_latency += merge_resp.latency_ms
+            models_used.append(merge_resp.model)
+            merge_resp_model = merge_resp.model
+
+        review_text = final_review
+        used_model = merge_resp_model if len(partial_reviews) > 1 else models_used[0]
+
+    else:
+        # ── Стандартный inline review (один батч или нет батчей) ────────────
+        # Если один батч — используем его файлы напрямую
+        if chunks and len(chunks) == 1:
+            project_info = (
+                f"Language: {state.get('project_context', {}).get('language', 'Unknown')}\n"
+                f"Request: {state.get('user_request', '')}"
+            )
+            prompt = _build_chunk_prompt(chunks[0], 1, 1, project_info)
+        else:
+            prompt = _build_reviewer_prompt(state)
+
+        logger.info("[reviewer] Inline review, итерация=%d, модель=%s", iteration, model)
+
+        resp = await client.chat(
+            [
+                ChatMessage(role="system", content=_REVIEWER_SYSTEM),
+                ChatMessage(role="user", content=prompt),
+            ],
+            model=model,
+            temperature=0.1,
+            max_tokens=6144,
+        )
+        review_text = resp.content
+        total_cost = resp.cost_usd
+        total_latency = resp.latency_ms
+        models_used = [resp.model]
+        used_model = resp.model
+
+    verdict, comments = _extract_verdict(review_text)
     logger.info("[reviewer] Вердикт: %s (%d замечаний)", verdict.value, len(comments))
 
     output = AgentOutput(
         role=AgentRole.REVIEWER,
-        model_id=resp.model,
-        content=resp.content,
-        cost_usd=resp.cost_usd,
-        latency_ms=resp.latency_ms,
-        metadata={"verdict": verdict.value, "comments_count": len(comments)},
+        model_id=used_model,
+        content=review_text,
+        cost_usd=total_cost,
+        latency_ms=total_latency,
+        metadata={
+            "verdict": verdict.value,
+            "comments_count": len(comments),
+            "chunks_processed": len(chunks) if chunks else 1,
+        },
     )
 
     return {
-        "review_result": resp.content,
+        "review_result": review_text,
         "review_verdict": verdict.value,
         "review_comments": comments,
         "review_iteration": iteration + 1,
         "agent_outputs": [output],
         "completed_agents": [AgentRole.REVIEWER.value],
-        "total_cost_usd": resp.cost_usd,
-        "total_latency_ms": resp.latency_ms,
-        "models_used": [resp.model],
+        "total_cost_usd": total_cost,
+        "total_latency_ms": total_latency,
+        "models_used": models_used,
         "success": verdict in (ReviewVerdict.APPROVED, ReviewVerdict.NEEDS_FIX),
-        "logs": [f"[Reviewer] {verdict.value}, {len(comments)} comments, model={resp.model}"],
+        "logs": [
+            f"[Reviewer] {verdict.value}, {len(comments)} issues, "
+            f"{len(chunks) if chunks else 1} chunk(s), model={used_model}"
+        ],
     }
 
 
