@@ -185,6 +185,18 @@ def cmd_review(
         ui.print_project_info(result)
         ui.print_result(result)
 
+        # Предлагаем исправить найденные проблемы
+        if result.success and result.primary_output.strip():
+            console.print()
+            if ui.confirm("Исправить все найденные проблемы?"):
+                console.print()
+                with ui.spinner("[cyan]Исправляю проблемы...[/]"):
+                    fix_result = await orch.run_fix(
+                        paths=resolved,
+                        review_context=result.primary_output,
+                    )
+                ui.print_result(fix_result)
+
     _run(_run_it())
 
 

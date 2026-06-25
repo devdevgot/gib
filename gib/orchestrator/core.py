@@ -212,13 +212,26 @@ class Orchestrator:
         self,
         paths: list[Path] | None = None,
         error: str = "",
+        review_context: str = "",
     ) -> OrchestratorResult:
         """gib fix — BugFix workflow."""
         start = time.monotonic()
         path_strs = [str(p) for p in paths] if paths else []
+
+        # Если есть результат ревью — вставляем его как контекст задачи,
+        # чтобы агент точно знал что исправлять
+        user_request = "Исправить баги в коде"
+        if review_context:
+            user_request = (
+                "Исправить все проблемы, найденные в ходе code review.\n\n"
+                f"Результаты ревью:\n{review_context}"
+            )
+        elif error:
+            user_request = f"Исправить баги в коде. Ошибка: {error}"
+
         final_state, profile = await self._run_workflow(
             WorkflowType.BUGFIX,
-            "Исправить баги в коде",
+            user_request,
             target_paths=path_strs,
             error_input=error,
         )
