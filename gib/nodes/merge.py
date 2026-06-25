@@ -1,35 +1,35 @@
-"""Node: Merge — объединяет результаты параллельных агентов.
-
-Убирает конфликты, строит единый план изменений.
-"""
+"""Node: Merge — объединяет результаты параллельных агентов."""
 from __future__ import annotations
 
 from gib.core.container import Container
 from gib.core.state import GibState
 from gib.core.types import TaskType
+from gib.prompts.locale import RUSSIAN_ONLY
 from gib.utils import get_logger
 
 logger = get_logger("gib.nodes.merge")
 
-_MERGE_SYSTEM = """\
-You are a Senior Lead Engineer responsible for integrating outputs from multiple specialist agents.
+_MERGE_SYSTEM = f"""\
+Ты — ведущий инженер, отвечающий за интеграцию результатов нескольких специализированных агентов.
 
-You receive:
-1. Architectural design from an Architect
-2. Implementation code from a Developer  
-3. Research findings from a Researcher
+Ты получаешь:
+1. Архитектурный дизайн от архитектора
+2. Код реализации от разработчика
+3. Результаты исследования от исследователя
 
-Your job:
-- Synthesize these into a unified, coherent implementation plan
-- Resolve any conflicts between architectural design and code implementation
-- Incorporate research findings and best practices into the code
-- Ensure the final code is complete and consistent
-- Remove duplicate or conflicting suggestions
+Твоя задача:
+- Синтезировать всё в единый согласованный план реализации
+- Разрешить конфликты между архитектурой и кодом
+- Включить выводы исследования и best practices в код
+- Убедиться, что итоговый код полный и согласованный
+- Убрать дубли и противоречия
 
-Output a single unified implementation that:
-1. Follows the architectural decisions
-2. Incorporates research best practices
-3. Is production-ready
+Выдай единую итоговую реализацию, которая:
+1. Следует архитектурным решениям
+2. Учитывает результаты исследования
+3. Готова к продакшену
+
+{RUSSIAN_ONLY}
 """
 
 
@@ -39,36 +39,32 @@ def _build_merge_prompt(state: GibState) -> str:
     research = state.get("research_result", "")
 
     parts = [
-        f"## Original Task\n{state.get('user_request', '')}",
+        f"## Исходная задача\n{state.get('user_request', '')}",
     ]
 
     if arch:
-        parts.append(f"\n## Architecture Design (from Architect)\n{arch[:8000]}")
+        parts.append(f"\n## Архитектура (от архитектора)\n{arch[:8000]}")
     if code:
-        parts.append(f"\n## Implementation (from Developer)\n{code[:10000]}")
+        parts.append(f"\n## Реализация (от разработчика)\n{code[:10000]}")
     if research:
-        parts.append(f"\n## Research Findings (from Researcher)\n{research[:4000]}")
+        parts.append(f"\n## Исследование (от исследователя)\n{research[:4000]}")
 
     parts.append(
-        "\n## Your Task"
-        "\nMerge the above into a unified, complete implementation."
-        "\nResolve conflicts. Apply research insights to the code."
-        "\nProvide the final merged implementation."
+        "\n## Твоя задача"
+        "\nОбъедини всё выше в единую полную реализацию."
+        "\nРазреши конфликты. Примени выводы исследования к коду."
+        "\nПредоставь финальную объединённую реализацию."
     )
 
     return "\n".join(parts)
 
 
 async def node_merge(state: GibState) -> dict:
-    """
-    LangGraph Node: объединяет результаты агентов.
-    """
-    # Если нет конфликтов — просто собираем
+    """LangGraph Node: объединяет результаты агентов."""
     has_arch = bool(state.get("architecture_result"))
     has_code = bool(state.get("code_result"))
     has_research = bool(state.get("research_result"))
 
-    # Если только один агент — нечего мержить
     active_count = sum([has_arch, has_code, has_research])
     if active_count <= 1:
         final = (
@@ -81,7 +77,7 @@ async def node_merge(state: GibState) -> dict:
         return {
             "final_output": final,
             "current_step": "merged",
-            "logs": ["[Merge] Single agent output, no merge needed"],
+            "logs": ["[Merge] Один агент, мерж не требуется"],
         }
 
     container = Container.instance()
@@ -89,7 +85,7 @@ async def node_merge(state: GibState) -> dict:
     router = container.model_router()
 
     from gib.providers import ChatMessage
-    model = router.select_model(TaskType.REVIEW)  # Claude для мержа
+    model = router.select_model(TaskType.REVIEW)
     prompt = _build_merge_prompt(state)
 
     logger.info("[merge] Объединяю результаты %d агентов, модель: %s", active_count, model)
@@ -107,10 +103,10 @@ async def node_merge(state: GibState) -> dict:
     logger.info("[merge] Готово: %d chars, cost=$%.4f", len(resp.content), resp.cost_usd)
 
     return {
-        "code_result": resp.content,  # обновляем code_result объединённым результатом
+        "code_result": resp.content,
         "current_step": "merged",
         "total_cost_usd": resp.cost_usd,
         "total_latency_ms": resp.latency_ms,
         "models_used": [resp.model],
-        "logs": [f"[Merge] Merged {active_count} agents with {resp.model}"],
+        "logs": [f"[Merge] Объединено {active_count} агентов с {resp.model}"],
     }

@@ -25,7 +25,7 @@ def _render_diff(diff: str, max_lines: int = 60) -> None:
         return
     lines = diff.splitlines()
     if len(lines) > max_lines:
-        diff = "\n".join(lines[:max_lines]) + f"\n... [{len(lines) - max_lines} more lines]"
+        diff = "\n".join(lines[:max_lines]) + f"\n... [ещё {len(lines) - max_lines} строк]"
     syntax = Syntax(diff, "diff", theme="monokai", line_numbers=False)
     console.print(syntax)
 
@@ -42,7 +42,7 @@ def _render_approval_panel(state: GibState) -> None:
     warnings = state.get("warnings", [])
 
     # Заголовок
-    console.rule("[bold yellow]GIB — Review Changes[/bold yellow]")
+    console.rule("[bold yellow]GIB — Проверка изменений[/bold yellow]")
 
     # Warnings
     for w in warnings:
@@ -52,24 +52,24 @@ def _render_approval_panel(state: GibState) -> None:
     metrics = Table(show_header=False, box=None, padding=(0, 2))
     metrics.add_column("Key", style="dim")
     metrics.add_column("Value", style="bold")
-    metrics.add_row("Models", " → ".join(models[-5:]) if models else "—")
-    metrics.add_row("Cost", f"${cost:.5f}")
-    metrics.add_row("Time", f"{latency / 1000:.1f}s")
-    metrics.add_row("Files", str(len(patch_files)))
+    metrics.add_row("Модели", " → ".join(models[-5:]) if models else "—")
+    metrics.add_row("Стоимость", f"${cost:.5f}")
+    metrics.add_row("Время", f"{latency / 1000:.1f}с")
+    metrics.add_row("Файлы", str(len(patch_files)))
     if security_issues:
         critical = sum(1 for i in security_issues if i.severity == "critical")
         metrics.add_row(
-            "Security",
-            f"[red]{len(security_issues)} issues (critical: {critical})[/red]"
+            "Безопасность",
+            f"[red]{len(security_issues)} проблем (критических: {critical})[/red]"
             if critical else
-            f"[yellow]{len(security_issues)} issues[/yellow]"
+            f"[yellow]{len(security_issues)} проблем[/yellow]"
         )
     console.print(metrics)
     console.print()
 
     # Список файлов
     if patch_files:
-        console.print(Panel(summary, title="[bold]Files to Change[/bold]", border_style="blue"))
+        console.print(Panel(summary, title="[bold]Файлы для изменения[/bold]", border_style="blue"))
         console.print()
 
         # Diff первых 3 файлов
@@ -79,13 +79,13 @@ def _render_approval_panel(state: GibState) -> None:
             console.print()
 
         if len(patch_files) > 3:
-            console.print(f"[dim]... and {len(patch_files) - 3} more files[/dim]\n")
+            console.print(f"[dim]... и ещё {len(patch_files) - 3} файлов[/dim]\n")
 
     # Краткое ревью
     if review:
         console.print(Panel(
             review,
-            title="[bold]Reviewer Summary[/bold]",
+            title="[bold]Итог ревью[/bold]",
             border_style="green",
         ))
 
@@ -106,11 +106,11 @@ async def node_approval(state: GibState) -> dict:
 
     if critical_issues:
         console.print(
-            f"\n[red bold]⛔ BLOCKED: {len(critical_issues)} critical security issues![/red bold]"
+            f"\n[red bold]⛔ ЗАБЛОКИРОВАНО: {len(critical_issues)} критических проблем безопасности![/red bold]"
         )
         for issue in critical_issues:
             console.print(f"  [red]• {issue.file}:{issue.line} — {issue.description}[/red]")
-        console.print("[yellow]Fix critical issues before applying.[/yellow]\n")
+        console.print("[yellow]Исправьте критические проблемы перед применением.[/yellow]\n")
 
         return {
             "approval_status": ApprovalStatus.REJECTED.value,
@@ -121,7 +121,7 @@ async def node_approval(state: GibState) -> dict:
     # Запрашиваем подтверждение
     try:
         approved = Confirm.ask(
-            "\n[bold]Apply these changes?[/bold]",
+            "\n[bold]Применить эти изменения?[/bold]",
             default=False,
         )
     except (KeyboardInterrupt, EOFError):

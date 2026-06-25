@@ -31,71 +31,71 @@ _STATIC_RULES: list[_StaticRule] = [
         pattern=r"(?i)(password|passwd|pwd|secret|api_key|apikey|token|private_key)\s*=\s*['\"][^'\"]{6,}['\"]",
         severity="critical",
         category="secrets",
-        description="Hardcoded secret/credential detected",
-        recommendation="Move to environment variables or secrets manager",
+        description="Обнаружен захардкоженный секрет или учётные данные",
+        recommendation="Вынесите в переменные окружения или менеджер секретов",
     ),
     _StaticRule(
         pattern=r"(?i)execute\s*\(\s*['\"].*?\%[sd].*?['\"].*?\%|execute\s*\(\s*f['\"].*?\{.*?\}",
         severity="critical",
         category="sql_injection",
-        description="Potential SQL Injection via string formatting",
-        recommendation="Use parameterized queries or ORM",
+        description="Возможная SQL-инъекция через форматирование строк",
+        recommendation="Используйте параметризованные запросы или ORM",
     ),
     _StaticRule(
         pattern=r"(?i)innerHTML\s*=|document\.write\s*\(|eval\s*\(",
         severity="high",
         category="xss",
-        description="Potential XSS via unsafe DOM manipulation",
-        recommendation="Use textContent, DOMPurify, or template escaping",
+        description="Возможная XSS через небезопасную работу с DOM",
+        recommendation="Используйте textContent, DOMPurify или экранирование шаблонов",
     ),
     _StaticRule(
         pattern=r"(?i)jwt\.decode\([^,]+,?\s*(?:options\s*=\s*\{[^}]*verify\s*:\s*false|algorithms\s*=\s*\[[\s'\"]*none[\s'\"]*\])",
         severity="critical",
         category="jwt",
-        description="JWT verification disabled",
-        recommendation="Always verify JWT signatures",
+        description="Отключена проверка JWT",
+        recommendation="Всегда проверяйте подписи JWT",
     ),
     _StaticRule(
         pattern=r"(?i)verify\s*=\s*False|ssl_verify\s*=\s*False|verify_ssl\s*=\s*False",
         severity="high",
         category="ssl",
-        description="SSL verification disabled",
-        recommendation="Never disable SSL verification in production",
+        description="Отключена проверка SSL",
+        recommendation="Никогда не отключайте проверку SSL в продакшене",
     ),
     _StaticRule(
         pattern=r"(?i)subprocess\.(call|run|Popen)\s*\([^)]*shell\s*=\s*True",
         severity="high",
         category="command_injection",
-        description="Shell command injection risk via shell=True",
-        recommendation="Use shell=False and pass arguments as list",
+        description="Риск инъекции команд через shell=True",
+        recommendation="Используйте shell=False и передавайте аргументы списком",
     ),
     _StaticRule(
         pattern=r"(?i)pickle\.loads?\s*\(",
         severity="high",
         category="deserialization",
-        description="Unsafe deserialization with pickle",
-        recommendation="Use JSON or cryptographically signed formats",
+        description="Небезопасная десериализация через pickle",
+        recommendation="Используйте JSON или криптографически подписанные форматы",
     ),
     _StaticRule(
         pattern=r"(?i)md5\s*\(|hashlib\.md5|hashlib\.sha1",
         severity="medium",
         category="weak_crypto",
-        description="Weak cryptographic hash function",
-        recommendation="Use SHA-256 or stronger (hashlib.sha256)",
+        description="Слабая криптографическая хеш-функция",
+        recommendation="Используйте SHA-256 или сильнее (hashlib.sha256)",
     ),
     _StaticRule(
         pattern=r"(?i)random\.random\(\)|random\.randint\(",
         severity="low",
         category="weak_random",
-        description="Non-cryptographic random for potentially sensitive use",
-        recommendation="Use secrets module for security-sensitive randomness",
+        description="Некриптографический random для потенциально чувствительных данных",
+        recommendation="Используйте модуль secrets для криптографически стойкой случайности",
     ),
     _StaticRule(
         pattern=r"(?i)0\.0\.0\.0|ALLOWED_HOSTS\s*=\s*\[[\s'\"]*\*[\s'\"]*\]",
         severity="medium",
         category="network",
-        description="Overly permissive network binding or CORS",
-        recommendation="Restrict to specific hosts in production",
+        description="Слишком широкие сетевые привязки или CORS",
+        recommendation="Ограничьте конкретными хостами в продакшене",
     ),
 ]
 
@@ -139,7 +139,7 @@ async def node_security(state: GibState) -> dict:
 
     # Сканируем новый код от разработчика
     if code_result:
-        issues = _scan_content(code_result, "<generated_code>")
+        issues = _scan_content(code_result, "<сгенерированный_код>")
         all_issues.extend(issues)
 
     # Определяем прошёл ли скан
@@ -160,7 +160,7 @@ async def node_security(state: GibState) -> dict:
     )
 
     log_msg = (
-        f"[Security] {'PASSED' if security_passed else 'BLOCKED'} — "
+        f"[Security] {'ПРОЙДЕН' if security_passed else 'ЗАБЛОКИРОВАН'} — "
         f"critical={critical_count}, high={high_count}, "
         f"medium={severity_counts['medium']}, low={severity_counts['low']}"
     )
@@ -168,7 +168,8 @@ async def node_security(state: GibState) -> dict:
     warnings: list[str] = []
     if not security_passed:
         warnings.append(
-            f"⚠️ {critical_count} critical security issues found! Fix before applying changes."
+            f"⚠️ Найдено критических проблем безопасности: {critical_count}. "
+            "Исправьте перед применением изменений."
         )
 
     return {

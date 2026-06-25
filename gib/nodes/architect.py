@@ -1,36 +1,36 @@
-"""Node: Architect Agent — Claude проектирует архитектуру решения.
-
-Запускается параллельно с Developer и Researcher.
-"""
+"""Node: Architect Agent — проектирует архитектуру решения."""
 from __future__ import annotations
 
 from gib.core.container import Container
 from gib.core.state import GibState
 from gib.core.types import AgentOutput, AgentRole, TaskType
+from gib.prompts.locale import RUSSIAN_ONLY
 from gib.utils import get_logger
 
 logger = get_logger("gib.nodes.architect")
 
-_ARCHITECT_SYSTEM = """\
-You are a Senior Software Architect with 15+ years of experience.
+_ARCHITECT_SYSTEM = f"""\
+Ты — ведущий архитектор ПО с 15+ годами опыта.
 
-Your responsibility: design a clean, scalable architectural solution.
+Твоя задача: спроектировать чистое, масштабируемое архитектурное решение.
 
-Focus on:
-- Component breakdown and boundaries
-- Data flow and API contracts
-- Design patterns (SOLID, DRY, KISS)
-- Scalability and maintainability
-- Potential edge cases and failure modes
+Сфокусируйся на:
+- разбиении на компоненты и границы ответственности
+- потоках данных и контрактах API
+- паттернах проектирования (SOLID, DRY, KISS)
+- масштабируемости и сопровождаемости
+- краевых случаях и режимах отказа
 
-Be concrete and specific. Provide:
-1. Architecture overview
-2. Component list with responsibilities
-3. Data models / interfaces
-4. Implementation sequence (which files to modify and in what order)
-5. Potential risks and mitigations
+Будь конкретным. Предоставь:
+1. Обзор архитектуры
+2. Список компонентов с обязанностями
+3. Модели данных / интерфейсы
+4. Порядок реализации (какие файлы менять и в какой последовательности)
+5. Риски и способы их снижения
 
-Do NOT write implementation code — only architectural decisions.
+Не пиши код реализации — только архитектурные решения.
+
+{RUSSIAN_ONLY}
 """
 
 
@@ -41,14 +41,12 @@ def _build_architect_prompt(state: GibState) -> str:
     plan = state.get("execution_plan", "")
     session_context = state.get("session_context", "")
 
-    # Список релевантных файлов
     if relevant_files:
         files_list = "\n".join(f"  - {f}" for f in relevant_files)
-        relevant_section = f"\n## Relevant Files\n{files_list}"
+        relevant_section = f"\n## Релевантные файлы\n{files_list}"
     else:
         relevant_section = ""
 
-    # Контекст файлов — полный контент
     file_context = ""
     for path in relevant_files:
         content = file_contents.get(path, "")
@@ -56,32 +54,28 @@ def _build_architect_prompt(state: GibState) -> str:
             continue
         preview = content[:10000]
         if len(content) > 10000:
-            preview += f"\n\n... [truncated, {len(content)} total chars]"
+            preview += f"\n\n... [обрезано, всего {len(content)} символов]"
         file_context += f"\n### {path}\n```\n{preview}\n```\n"
 
-    # Fallback на старое поведение если relevant_files пуст
     if not file_context and file_contents:
         for path, content in list(file_contents.items())[:10]:
             file_context += f"\n### {path}\n```\n{content[:3000]}\n```\n"
 
     parts = [
-        f"## Task\n{state.get('user_request', '')}",
+        f"## Задача\n{state.get('user_request', '')}",
         f"\n{session_context}" if session_context else "",
-        f"\n## Execution Plan\n{plan}" if plan else "",
-        f"\n## Project Stack\nLanguage: {ctx.get('language', 'Unknown')}",
-        f"Frameworks: {', '.join(ctx.get('frameworks', []))}",
+        f"\n## План выполнения\n{plan}" if plan else "",
+        f"\n## Стек проекта\nЯзык: {ctx.get('language', 'Неизвестно')}",
+        f"Фреймворки: {', '.join(ctx.get('frameworks', []))}",
         relevant_section,
-        f"\n## Relevant Code{file_context}" if file_context else "",
+        f"\n## Релевантный код{file_context}" if file_context else "",
     ]
 
     return "\n".join(p for p in parts if p)
 
 
 async def node_architect(state: GibState) -> dict:
-    """
-    LangGraph Node: Claude проектирует архитектуру.
-    Запускается в параллельной ветке.
-    """
+    """LangGraph Node: проектирует архитектуру."""
     container = Container.instance()
     client = container.openrouter_client()
     router = container.model_router()
@@ -122,5 +116,5 @@ async def node_architect(state: GibState) -> dict:
         "total_cost_usd": resp.cost_usd,
         "total_latency_ms": resp.latency_ms,
         "models_used": [resp.model],
-        "logs": [f"[Architect] Completed with {resp.model}, cost=${resp.cost_usd:.4f}"],
+        "logs": [f"[Architect] Завершено с {resp.model}, стоимость=${resp.cost_usd:.4f}"],
     }

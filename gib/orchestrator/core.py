@@ -182,12 +182,12 @@ class Orchestrator:
 
         if resume:
             if not thread_id:
-                raise ValueError("thread_id is required to resume a workflow")
+                raise ValueError("Для возобновления workflow требуется thread_id")
             run = self._memory.get_workflow_run(thread_id)
             if not run:
-                raise ValueError(f"Workflow run not found: {thread_id}")
+                raise ValueError(f"Запуск workflow не найден: {thread_id}")
             if run.status != "paused_credits":
-                raise ValueError(f"Run {thread_id} is not paused (status={run.status})")
+                raise ValueError(f"Запуск {thread_id} не приостановлен (статус={run.status})")
             workflow_type = WorkflowType(run.workflow_type)
             try:
                 final_state = await WorkflowRegistry.run(
@@ -406,7 +406,7 @@ class Orchestrator:
             else self._memory.get_latest_paused_run(str(self.root))
         )
         if not run:
-            raise ValueError("No paused workflow found for this project")
+            raise ValueError("Нет приостановленных задач для этого проекта")
 
         start = time.monotonic()
         final_state, profile = await self._run_workflow(

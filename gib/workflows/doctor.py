@@ -34,13 +34,13 @@ async def _node_doctor_merge(state: GibState) -> dict:
     security_issues = state.get("security_issues", [])
 
     # Собираем отчёт
-    sections: list[str] = ["# 🩺 GIB Doctor Report\n"]
+    sections: list[str] = ["# 🩺 Отчёт GIB Doctor\n"]
 
     if review:
-        sections.append(f"## Code Quality Review\n{review[:2000]}")
+        sections.append(f"## Ревью качества кода\n{review[:2000]}")
 
     if security_issues:
-        sec_lines = [f"## Security Scan — {len(security_issues)} issues found"]
+        sec_lines = [f"## Сканирование безопасности — найдено проблем: {len(security_issues)}"]
         for issue in security_issues[:10]:
             sec_lines.append(
                 f"- [{issue.severity.upper()}] {issue.file}:{issue.line} "
@@ -48,10 +48,10 @@ async def _node_doctor_merge(state: GibState) -> dict:
             )
         sections.append("\n".join(sec_lines))
     else:
-        sections.append("## Security Scan\n✅ No issues found")
+        sections.append("## Сканирование безопасности\n✅ Проблем не обнаружено")
 
     if research:
-        sections.append(f"## Best Practices & Recommendations\n{research[:1500]}")
+        sections.append(f"## Рекомендации и best practices\n{research[:1500]}")
 
     final = "\n\n".join(sections)
 
@@ -59,7 +59,7 @@ async def _node_doctor_merge(state: GibState) -> dict:
         "final_output": final,
         "success": True,
         "current_step": "done",
-        "logs": ["[Doctor] Diagnosis complete"],
+        "logs": ["[Doctor] Диагностика завершена"],
     }
 
 

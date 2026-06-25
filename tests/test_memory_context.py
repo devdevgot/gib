@@ -41,4 +41,4 @@ def test_build_project_memory_context_includes_tasks_without_summary(tmp_path):
     ctx = build_project_memory_context(store, project, include_chat=False)
     assert "explain auth" in ctx
     assert "found 2 issues" in ctx
-    assert "no stored output" in ctx
+    assert "результат не сохранён" in ctx

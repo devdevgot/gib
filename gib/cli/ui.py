@@ -24,7 +24,7 @@ def print_banner() -> None:
     """Print GIB banner."""
     console.print(
         Panel.fit(
-            "[bold cyan]GIB[/] [dim]— AI Development Operating System[/]",
+            "[bold cyan]GIB[/] [dim]— AI-операционная система для разработки[/]",
             border_style="cyan",
         )
     )
@@ -94,11 +94,11 @@ def _print_meta_line(result: OrchestratorResult) -> None:
     """Print cost / time / model as a single dim line."""
     parts: list[str] = []
     if result.is_pipeline:
-        parts.append(f"[dim]pipeline[/]")
+        parts.append(f"[dim]пайплайн[/]")
     if result.model_used:
-        parts.append(f"[model]{result.model_used}[/]")
+        parts.append(f"[модель]{result.model_used}[/]")
     if result.total_cost_usd > 0:
-        parts.append(f"[cost]{result.cost_str()}[/]")
+        parts.append(f"[стоимость]{result.cost_str()}[/]")
     if result.total_latency_ms > 0:
         parts.append(f"[dim]{result.total_latency_ms}ms[/]")
     if parts:
@@ -110,7 +110,7 @@ def print_diff(diff: str) -> None:
     if diff:
         console.print(Syntax(diff, "diff", theme="monokai", line_numbers=False))
     else:
-        console.print("[dim]No changes[/]")
+        console.print("[dim]Нет изменений[/]")
 
 
 def confirm(prompt: str = "Применить изменения?") -> bool:

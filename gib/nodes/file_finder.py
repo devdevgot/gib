@@ -13,6 +13,7 @@ from pathlib import Path
 
 from gib.core.container import Container
 from gib.core.state import GibState
+from gib.prompts.locale import RUSSIAN_ONLY
 from gib.utils import get_logger
 from gib.utils.project_root import get_project_root
 
@@ -30,19 +31,21 @@ _SKIP_EXTS = {
     ".min.js", ".min.css",
 }
 
-_FINDER_SYSTEM = """\
-You are a code navigator. Given a task and a list of files in a project, \
-select the most relevant files that will need to be READ or MODIFIED to complete the task.
+_FINDER_SYSTEM = f"""\
+Ты — навигатор по кодовой базе. По задаче и списку файлов проекта \
+выбери наиболее релевантные файлы, которые нужно ПРОЧИТАТЬ или ИЗМЕНИТЬ для выполнения задачи.
 
-Rules:
-- Select at most 40 files
-- Prefer specificity: pick the files most directly related to the task
-- Always include __init__.py files for modified packages
-- Always include config files if the task touches configuration
-- Return ONLY a JSON array of relative file paths, nothing else
+Правила:
+- Выбери не более 40 файлов
+- Предпочитай конкретику: файлы, напрямую связанные с задачей
+- Всегда включай __init__.py для изменяемых пакетов
+- Всегда включай конфигурационные файлы, если задача затрагивает настройки
+- Верни ТОЛЬКО JSON-массив относительных путей к файлам, без пояснений
 
-Example output:
+Пример ответа:
 ["gib/nodes/developer.py", "gib/core/state.py", "gib/workflows/feature.py"]
+
+{RUSSIAN_ONLY}
 """
 
 _MAX_FILES_IN_PROMPT = 400
@@ -127,7 +130,7 @@ def _summarize_file_list(all_files: list[str], candidates: list[str]) -> str:
     omitted = len(all_files) - len(head)
     summary = "\n".join(head)
     if omitted > 0:
-        summary += f"\n... [{omitted} more files omitted from listing]"
+        summary += f"\n... [ещё {omitted} файлов не показано в списке]"
     return summary
 
 
@@ -147,24 +150,24 @@ async def _llm_select_files(
     _model = get_config().models.cheap or "deepseek/deepseek-chat"
 
     all_files_str = _summarize_file_list(all_files, candidates)
-    candidates_str = "\n".join(candidates) if candidates else "(none found)"
-    memory_block = f"\n## Prior Project Context\n{session_context[:3000]}\n" if session_context else ""
+    candidates_str = "\n".join(candidates) if candidates else "(не найдено)"
+    memory_block = f"\n## Контекст проекта из памяти\n{session_context[:3000]}\n" if session_context else ""
 
     prompt = f"""\
-## Task
+## Задача
 {task}
 {memory_block}
-## Project Info
-Language: {project_context.get('language', 'Unknown')}
-Frameworks: {', '.join(project_context.get('frameworks', []))}
+## Информация о проекте
+Язык: {project_context.get('language', 'неизвестен')}
+Фреймворки: {', '.join(project_context.get('frameworks', []))}
 
-## Grep Candidates (files containing task keywords)
+## Кандидаты grep (файлы с ключевыми словами задачи)
 {candidates_str}
 
-## Project Files
+## Файлы проекта
 {all_files_str}
 
-Select the most relevant files. Return ONLY a JSON array of paths."""
+Выбери наиболее релевантные файлы. Верни ТОЛЬКО JSON-массив путей."""
 
     resp = await client.chat(
         [
@@ -204,7 +207,7 @@ def _read_files(root: Path, rel_paths: list[str], max_bytes: int = 100_000) -> d
         try:
             content = abs_path.read_text(errors="ignore")
             if len(content) > max_bytes:
-                content = content[:max_bytes] + f"\n\n... [truncated, {len(content)} bytes total]"
+                content = content[:max_bytes] + f"\n\n... [обрезано, всего {len(content)} байт]"
             result[rel] = content
         except Exception as e:
             logger.warning("[file_finder] Ошибка чтения %s: %s", rel, e)

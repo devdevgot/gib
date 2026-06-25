@@ -32,8 +32,8 @@ async def start_chat(*, resume: bool = True) -> None:
     profile = analyzer.analyze()
 
     console.print(
-        f"  [dim]Project:[/] [cyan]{profile.language}[/] / [cyan]{profile.framework}[/]  "
-        f"[dim]Model:[/] [model]{get_config().models.default}[/]\n"
+        f"  [dim]Проект:[/] [cyan]{profile.language}[/] / [cyan]{profile.framework}[/]  "
+        f"[dim]Модель:[/] [model]{get_config().models.default}[/]\n"
     )
 
     router = ModelRouter()
@@ -58,7 +58,7 @@ async def start_chat(*, resume: bool = True) -> None:
 
     file_index = "\n".join(f"  - {p}" for p in all_files[:80])
     if len(all_files) > 80:
-        file_index += f"\n  ... and {len(all_files) - 80} more files"
+        file_index += f"\n  ... и ещё {len(all_files) - 80} файлов"
 
     system_msg = f"""Ты — GIB, AI-ассистент для разработки программного обеспечения.
 Ты помогаешь с проектом на {profile.language} / {profile.framework}.
@@ -147,8 +147,8 @@ async def start_chat(*, resume: bool = True) -> None:
             console.print()
             console.print(Markdown(resp.content))
             console.print(
-                f"\n  [cost]${resp.cost_usd:.5f}[/]  "
-                f"[dim]{resp.latency_ms}ms  ·  total ${total_cost:.4f}[/]\n"
+                f"\n  [стоимость]${resp.cost_usd:.5f}[/]  "
+                f"[dim]{resp.latency_ms}ms  ·  всего ${total_cost:.4f}[/]\n"
             )
 
         except Exception as e:

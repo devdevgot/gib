@@ -11,35 +11,40 @@ from typing import Any
 from gib.core.container import Container
 from gib.core.state import GibState
 from gib.core.types import AgentRole, SubTask, TaskType
+from gib.prompts.locale import RUSSIAN_ONLY
 from gib.utils import get_logger
 
 logger = get_logger("gib.nodes.task_planner")
 
-_PLANNER_SYSTEM = """\
-You are a senior software architect. Your job is to analyze a user's request and decompose it into \
-independent, parallelizable subtasks.
+_PLANNER_SYSTEM = f"""\
+Ты — senior software architect. Проанализируй запрос пользователя и разбей его на \
+независимые, параллелизуемые подзадачи.
 
-Each subtask should:
-- Have a single clear responsibility
-- Be independently executable
-- Map to exactly one agent role
+Каждая подзадача должна:
+- Иметь одну чёткую зону ответственности
+- Выполняться независимо
+- Соответствовать ровно одной роли агента
 
-Available agent roles: architect, developer, researcher, reviewer, tester
+Доступные роли агентов: architect, developer, researcher, reviewer, tester
 
-Respond ONLY with valid JSON in this exact format:
-{
-  "plan_summary": "brief description of the overall approach",
+Ответь ТОЛЬКО валидным JSON в точном формате:
+{{
+  "plan_summary": "краткое описание общего подхода",
   "subtasks": [
-    {
+    {{
       "id": "task_1",
-      "title": "Short title",
-      "description": "Detailed description of what needs to be done",
+      "title": "Краткое название",
+      "description": "Подробное описание того, что нужно сделать",
       "agent_role": "architect|developer|researcher|reviewer|tester",
       "depends_on": [],
       "priority": 1
-    }
+    }}
   ]
-}
+}}
+
+Текстовые поля JSON (plan_summary, title, description) пиши на русском языке.
+
+{RUSSIAN_ONLY}
 """
 
 
@@ -51,19 +56,19 @@ def _build_planner_prompt(state: GibState) -> str:
     session_context = state.get("session_context", "")
 
     parts = [
-        f"## User Request\n{state.get('user_request', '')}",
+        f"## Запрос пользователя\n{state.get('user_request', '')}",
     ]
     if session_context:
-        parts.append(f"\n## Project Memory\n{session_context[:8000]}")
+        parts.append(f"\n## Память проекта\n{session_context[:8000]}")
     parts.extend([
-        f"\n## Project Info\nLanguage: {ctx.get('language', 'Unknown')}",
-        f"Frameworks: {', '.join(stack.get('frameworks', []))}",
-        f"Has Docker: {ctx.get('has_docker', False)}",
+        f"\n## Информация о проекте\nЯзык: {ctx.get('language', 'неизвестен')}",
+        f"Фреймворки: {', '.join(stack.get('frameworks', []))}",
+        f"Docker: {'есть' if ctx.get('has_docker', False) else 'нет'}",
     ])
     if deps:
-        parts.append(f"\n## Dependencies (truncated)\n{deps}")
+        parts.append(f"\n## Зависимости (сокращённо)\n{deps}")
     if readme:
-        parts.append(f"\n## README (truncated)\n{readme}")
+        parts.append(f"\n## README (сокращённо)\n{readme}")
 
     return "\n".join(parts)
 
@@ -73,7 +78,7 @@ def _parse_subtasks(raw: str) -> tuple[str, list[SubTask]]:
     # Ищем JSON блок
     match = re.search(r"\{[\s\S]+\}", raw)
     if not match:
-        return "Could not parse plan", []
+        return "Не удалось разобрать план", []
 
     try:
         data = json.loads(match.group())

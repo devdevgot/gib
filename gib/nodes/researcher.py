@@ -1,29 +1,28 @@
-"""Node: Researcher Agent — Gemini проверяет документацию и best practices.
-
-Запускается параллельно с Architect и Developer.
-Ищет breaking changes, deprecated APIs, актуальные паттерны.
-"""
+"""Node: Researcher Agent — проверяет документацию и best practices."""
 from __future__ import annotations
 
 from gib.core.container import Container
 from gib.core.state import GibState
 from gib.core.types import AgentOutput, AgentRole, TaskType
+from gib.prompts.locale import RUSSIAN_ONLY
 from gib.utils import get_logger
 
 logger = get_logger("gib.nodes.researcher")
 
-_RESEARCHER_SYSTEM = """\
-You are a Technical Researcher specializing in software best practices and documentation.
+_RESEARCHER_SYSTEM = f"""\
+Ты — технический исследователь, специализирующийся на best practices и документации.
 
-Your job:
-1. Identify relevant libraries, frameworks, and APIs mentioned in the task
-2. Check for known breaking changes, deprecations, or version compatibility issues
-3. Find current best practices for the detected technology stack
-4. Identify potential security vulnerabilities in the approach
-5. Suggest proven patterns and alternatives
+Твои задачи:
+1. Определить релевантные библиотеки, фреймворки и API из задачи
+2. Проверить breaking changes, deprecated API и совместимость версий
+3. Найти актуальные best practices для обнаруженного стека
+4. Выявить потенциальные уязвимости в предлагаемом подходе
+5. Предложить проверенные паттерны и альтернативы
 
-Be specific: include version numbers, official documentation references, and concrete examples.
-Focus on what could go wrong and how to prevent it.
+Будь конкретным: указывай версии, ссылки на документацию и примеры.
+Сфокусируйся на том, что может пойти не так и как это предотвратить.
+
+{RUSSIAN_ONLY}
 """
 
 
@@ -36,7 +35,6 @@ def _build_researcher_prompt(state: GibState) -> str:
     relevant_files: list[str] = state.get("relevant_files", [])
     file_contents: dict[str, str] = state.get("file_contents", {})
 
-    # Контекст исходного кода
     file_context = ""
     paths = relevant_files or list(file_contents.keys())[:15]
     for path in paths:
@@ -45,27 +43,27 @@ def _build_researcher_prompt(state: GibState) -> str:
             continue
         preview = content[:8000]
         if len(content) > 8000:
-            preview += f"\n\n... [truncated, {len(content)} total chars]"
+            preview += f"\n\n... [обрезано, всего {len(content)} символов]"
         file_context += f"\n### {path}\n```\n{preview}\n```\n"
 
     parts = [
-        f"## Task to Research\n{state.get('user_request', '')}",
+        f"## Задача для исследования\n{state.get('user_request', '')}",
     ]
     if session_context:
-        parts.append(f"\n## Project Memory\n{session_context[:6000]}")
+        parts.append(f"\n## Память проекта\n{session_context[:6000]}")
     parts.extend([
-        f"\n## Tech Stack\nLanguage: {ctx.get('language', 'Unknown')}",
-        f"Frameworks: {', '.join(stack.get('frameworks', []))}",
-        f"\n## Dependencies\n{deps}" if deps else "",
-        f"\n## Proposed Architecture\n{arch}" if arch else "",
-        f"\n## Relevant Code{file_context}" if file_context else "",
+        f"\n## Технологический стек\nЯзык: {ctx.get('language', 'Неизвестно')}",
+        f"Фреймворки: {', '.join(stack.get('frameworks', []))}",
+        f"\n## Зависимости\n{deps}" if deps else "",
+        f"\n## Предлагаемая архитектура\n{arch}" if arch else "",
+        f"\n## Релевантный код{file_context}" if file_context else "",
         (
-            "\n## Research Focus"
-            "\n1. Are there breaking changes in recent versions of used libraries?"
-            "\n2. What are current best practices for this stack?"
-            "\n3. Are there security concerns with this approach?"
-            "\n4. What alternative patterns should be considered?"
-            "\n5. Any gotchas or common mistakes to avoid?"
+            "\n## Фокус исследования"
+            "\n1. Есть ли breaking changes в недавних версиях используемых библиотек?"
+            "\n2. Какие актуальные best practices для этого стека?"
+            "\n3. Есть ли проблемы безопасности в этом подходе?"
+            "\n4. Какие альтернативные паттерны стоит рассмотреть?"
+            "\n5. Какие типичные ошибки и подводные камни?"
         ),
     ])
 
@@ -73,9 +71,7 @@ def _build_researcher_prompt(state: GibState) -> str:
 
 
 async def node_researcher(state: GibState) -> dict:
-    """
-    LangGraph Node: Gemini исследует best practices и документацию.
-    """
+    """LangGraph Node: исследует best practices и документацию."""
     container = Container.instance()
     client = container.openrouter_client()
     router = container.model_router()
@@ -116,5 +112,5 @@ async def node_researcher(state: GibState) -> dict:
         "total_cost_usd": resp.cost_usd,
         "total_latency_ms": resp.latency_ms,
         "models_used": [resp.model],
-        "logs": [f"[Researcher] Completed with {resp.model}"],
+        "logs": [f"[Researcher] Завершено с {resp.model}"],
     }

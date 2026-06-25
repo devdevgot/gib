@@ -58,7 +58,7 @@ class WorkflowRegistry:
         _load_all()
         key = workflow_type.value if isinstance(workflow_type, WorkflowType) else workflow_type
         if key not in _REGISTRY:
-            raise KeyError(f"Unknown workflow type: {key!r}. Available: {list(_REGISTRY.keys())}")
+            raise KeyError(f"Неизвестный тип workflow: {key!r}. Доступны: {list(_REGISTRY.keys())}")
         return _REGISTRY[key]
 
     @staticmethod

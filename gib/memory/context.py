@@ -47,7 +47,7 @@ def build_project_memory_context(
     sections: list[str] = []
 
     if tasks:
-        sections.append("## Project Memory (previous GIB tasks)")
+        sections.append("## Память проекта (предыдущие задачи GIB)")
         for t in reversed(tasks):
             sections.append(_format_task_record(t))
 
@@ -65,4 +65,4 @@ def _format_task_record(task: TaskRecord) -> str:
     summary = (task.result_summary or "").strip()
     if summary:
         return f"{header}\n{summary[:50_000]}"
-    return f"{header}\n(status: {task.status}, no stored output)"
+    return f"{header}\n(статус: {task.status}, результат не сохранён)"

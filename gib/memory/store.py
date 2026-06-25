@@ -229,13 +229,13 @@ class MemoryStore:
             return ""
 
         recent = messages[-limit_messages:]
-        lines = ["## Recent Chat History"]
+        lines = ["## Недавняя история чата"]
         for msg in recent:
             role = msg.get("role", "user")
             content = (msg.get("content") or "").strip()
             if not content or role == "system":
                 continue
-            label = "User" if role == "user" else "Assistant"
+            label = "Пользователь" if role == "user" else "Ассистент"
             lines.append(f"\n**{label}:** {content[:2000]}")
         return "\n".join(lines) if len(lines) > 1 else ""
 

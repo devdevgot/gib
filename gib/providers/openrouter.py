@@ -139,15 +139,15 @@ class OpenRouterClient:
                 )
                 if is_credits_error(e.response.status_code, body):
                     raise CreditsExhaustedError(
-                        "OpenRouter credits exhausted. Top up your balance and run: gib resume",
+                        "Кредиты OpenRouter закончились. Пополните баланс и выполните: gib resume",
                         status_code=e.response.status_code,
                         details=body,
                     ) from e
                 # 400 with this model slug — don't retry, fail fast
                 if e.response.status_code == 400:
                     raise RuntimeError(
-                        f"OpenRouter 400 Bad Request for model '{resolved_model}'.\n"
-                        f"Details: {body}"
+                        f"OpenRouter: ошибка 400 для модели '{resolved_model}'.\n"
+                        f"Подробности: {body}"
                     ) from e
                 attempt += 1
                 if attempt >= self._config.openrouter.max_retries:
@@ -160,7 +160,7 @@ class OpenRouterClient:
                     break
 
         raise RuntimeError(
-            f"OpenRouter request failed after {self._config.openrouter.max_retries} attempts: {last_error}"
+            f"Запрос к OpenRouter не удался после {self._config.openrouter.max_retries} попыток: {last_error}"
         )
 
     async def stream_chat(

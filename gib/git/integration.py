@@ -32,25 +32,25 @@ class GitIntegration:
     def status(self) -> str:
         """Get git status output."""
         if not self._repo:
-            return "Not a git repository"
+            return "Не git-репозиторий"
         try:
             import git
             repo = self._repo  # type: ignore[assignment]
             lines = []
             # Modified files
             for item in repo.index.diff(None):
-                lines.append(f"  modified:   {item.a_path}")
+                lines.append(f"  изменён:    {item.a_path}")
             # Staged files
             for item in repo.index.diff("HEAD"):
-                lines.append(f"  staged:     {item.a_path}")
+                lines.append(f"  в индексе:  {item.a_path}")
             # Untracked files
             for path in repo.untracked_files:
-                lines.append(f"  untracked:  {path}")
+                lines.append(f"  неотслеж.:  {path}")
             if not lines:
-                return "Nothing to commit, working tree clean"
+                return "Нечего коммитить, рабочее дерево чистое"
             return "\n".join(lines)
         except Exception as e:
-            return f"Error getting status: {e}"
+            return f"Ошибка получения статуса: {e}"
 
     def diff(self, staged: bool = False, path: str = "") -> str:
         """Get git diff."""
@@ -73,9 +73,9 @@ class GitIntegration:
         unstaged = self.diff(staged=False)
         parts = []
         if staged:
-            parts.append(f"# Staged changes\n{staged}")
+            parts.append(f"# Изменения в индексе\n{staged}")
         if unstaged:
-            parts.append(f"# Unstaged changes\n{unstaged}")
+            parts.append(f"# Неиндексированные изменения\n{unstaged}")
         return "\n\n".join(parts)
 
     def commit(self, message: str, add_all: bool = True) -> bool:

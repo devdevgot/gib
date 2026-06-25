@@ -4,6 +4,7 @@ from __future__ import annotations
 from gib.core.container import Container
 from gib.core.state import GibState
 from gib.core.types import TaskType
+from gib.prompts.locale import RUSSIAN_ONLY
 from gib.utils import get_logger
 
 logger = get_logger("gib.nodes.test_generator")
@@ -25,22 +26,24 @@ _FRAMEWORK_SIGNATURES: dict[str, list[str]] = {
     "vitest": ["vitest", '"vitest"'],
 }
 
-_TEST_SYSTEM = """\
-You are a Senior Test Engineer. Write comprehensive, production-quality tests.
+_TEST_SYSTEM = f"""\
+Ты — senior test engineer. Пиши полноценные production-quality тесты.
 
-Rules:
-- Write tests that actually test behavior, not implementation
-- Cover: happy path, edge cases, error cases, boundary values
-- Use proper test isolation (mocks, fixtures, dependency injection)
-- Name tests descriptively: test_<action>_<condition>_<expected_result>
-- Aim for 80%+ coverage of the new code
-- Include integration tests where appropriate
+Правила:
+- Тестируй поведение, а не реализацию
+- Покрой: happy path, граничные случаи, ошибки, boundary values
+- Используй изоляцию тестов (моки, фикстуры, dependency injection)
+- Именуй тесты описательно: test_<действие>_<условие>_<ожидание>
+- Стремись к покрытию 80%+ нового кода
+- Добавляй интеграционные тесты где уместно
 
-Format:
-### <filename>
-```<language>
-<test code>
+Формат:
+### <имя_файла>
+```<язык>
+<код тестов>
 ```
+
+{RUSSIAN_ONLY}
 """
 
 
@@ -86,16 +89,16 @@ def _build_test_prompt(state: GibState, framework: str) -> str:
     test_examples = ""
     for path, content in existing_files.items():
         if "test" in path.lower() or "spec" in path.lower():
-            test_examples += f"\n### Existing test (style reference): {path}\n{content[:1000]}\n"
+            test_examples += f"\n### Существующий тест (образец стиля): {path}\n{content[:1000]}\n"
             break
 
     parts = [
-        f"## Task\n{state.get('user_request', '')}",
-        f"\n## Test Framework: {framework}",
-        f"\n## Code to Test\n{code[:6000]}" if code else "",
-        f"\n## Architecture\n{arch[:1500]}" if arch else "",
+        f"## Задача\n{state.get('user_request', '')}",
+        f"\n## Тестовый фреймворк: {framework}",
+        f"\n## Код для тестирования\n{code[:6000]}" if code else "",
+        f"\n## Архитектура\n{arch[:1500]}" if arch else "",
         test_examples,
-        "\n## Write comprehensive tests for all the above code.",
+        "\n## Напиши полноценные тесты для всего кода выше.",
     ]
 
     return "\n".join(p for p in parts if p)

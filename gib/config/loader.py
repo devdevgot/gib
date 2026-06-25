@@ -110,7 +110,7 @@ class Config(BaseModel):
             key = os.environ.get("OPENROUTER_API_KEY", "").strip()
         if not key:
             raise ValueError(
-                "OPENROUTER_API_KEY not set. Run: gib set-key"
+                "OPENROUTER_API_KEY не задан. Выполните: gib set-key"
             )
         return key
 

@@ -13,7 +13,7 @@ from gib.utils.console import console
 
 app = typer.Typer(
     name="gib",
-    help="GIB — AI Development Operating System",
+    help="GIB — AI-операционная система для разработки",
     add_completion=False,
     rich_markup_mode="rich",
     no_args_is_help=False,
@@ -135,9 +135,9 @@ def _print_help() -> None:
 @app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
-    version: Annotated[bool, typer.Option("--version", "-v", help="Show version")] = False,
+    version: Annotated[bool, typer.Option("--version", "-v", help="Показать версию")] = False,
 ) -> None:
-    """GIB — AI Development Operating System."""
+    """GIB — AI-операционная система для разработки."""
     if version:
         from gib import __version__
         console.print(f"gib {__version__}")
@@ -157,9 +157,9 @@ def main(
 
 @app.command("ask", hidden=True)
 def cmd_ask(
-    prompt: Annotated[str, typer.Argument(help="Free-form task prompt")],
+    prompt: Annotated[str, typer.Argument(help="Свободная задача для выполнения")],
 ) -> None:
-    """Run any development task with a free-form prompt (internal command)."""
+    """Выполнить задачу разработки по свободному запросу (внутренняя команда)."""
     _ensure_api_key()
     from gib.cli import ui
 
@@ -179,9 +179,9 @@ def cmd_ask(
 
 @app.command("review")
 def cmd_review(
-    paths: Annotated[Optional[list[Path]], typer.Argument(help="Files or dirs to review")] = None,
+    paths: Annotated[Optional[list[Path]], typer.Argument(help="Файлы или папки для ревью")] = None,
 ) -> None:
-    """Perform a thorough code review."""
+    """Провести тщательное код-ревью."""
     _ensure_api_key()
     from gib.cli import ui
 
@@ -214,10 +214,10 @@ def cmd_review(
 
 @app.command("fix")
 def cmd_fix(
-    paths: Annotated[Optional[list[Path]], typer.Argument(help="Files to fix")] = None,
-    error: Annotated[str, typer.Option("--error", "-e", help="Error message")] = "",
+    paths: Annotated[Optional[list[Path]], typer.Argument(help="Файлы для исправления")] = None,
+    error: Annotated[str, typer.Option("--error", "-e", help="Текст ошибки")] = "",
 ) -> None:
-    """Fix bugs in the codebase."""
+    """Исправить баги в кодовой базе."""
     _ensure_api_key()
     from gib.cli import ui
 
@@ -238,9 +238,9 @@ def cmd_fix(
 
 @app.command("refactor")
 def cmd_refactor(
-    paths: Annotated[list[Path], typer.Argument(help="Files or directories to refactor")],
+    paths: Annotated[list[Path], typer.Argument(help="Файлы или папки для рефакторинга")],
 ) -> None:
-    """Refactor code following SOLID and clean code principles."""
+    """Рефакторинг кода по принципам SOLID и чистого кода."""
     _ensure_api_key()
     from gib.cli import ui
 
@@ -260,9 +260,9 @@ def cmd_refactor(
 
 @app.command("commit")
 def cmd_commit(
-    auto: Annotated[bool, typer.Option("--auto", "-a", help="Commit without confirmation")] = False,
+    auto: Annotated[bool, typer.Option("--auto", "-a", help="Коммит без подтверждения")] = False,
 ) -> None:
-    """Generate a commit message and optionally commit."""
+    """Сгенерировать сообщение коммита и при необходимости закоммитить."""
     _ensure_api_key()
     from gib.cli import ui
     from gib.git import GitIntegration
@@ -286,7 +286,7 @@ def cmd_commit(
         git = GitIntegration(Path.cwd())
         status = git.status()
         if status:
-            console.print(f"\n[dim]Changes:[/]\n{status}")
+            console.print(f"\n[dim]Изменения:[/]\n{status}")
 
         if auto or ui.confirm("Закоммитить с этим сообщением?"):
             git.commit(result.primary_output)
@@ -303,7 +303,7 @@ def cmd_commit(
 
 @app.command("doctor")
 def cmd_doctor() -> None:
-    """Deep diagnostic: bugs, dead code, security, architecture issues."""
+    """Глубокая диагностика: баги, мёртвый код, безопасность, архитектура."""
     _ensure_api_key()
     from gib.cli import ui
 
@@ -323,14 +323,14 @@ def cmd_doctor() -> None:
 
 @app.command("explain")
 def cmd_explain(
-    path: Annotated[Path, typer.Argument(help="File or directory to explain")],
+    path: Annotated[Path, typer.Argument(help="Файл или папка для объяснения")],
 ) -> None:
-    """Explain a file or directory in detail."""
+    """Подробно объяснить файл или директорию."""
     _ensure_api_key()
     from gib.cli import ui
 
     if not path.exists():
-        ui.print_error(f"Path not found: {path}")
+        ui.print_error(f"Путь не найден: {path}")
         raise typer.Exit(3)
 
     async def _run_it():
@@ -348,9 +348,9 @@ def cmd_explain(
 
 @app.command("test")
 def cmd_test(
-    paths: Annotated[Optional[list[Path]], typer.Argument(help="Files to generate tests for")] = None,
+    paths: Annotated[Optional[list[Path]], typer.Argument(help="Файлы для генерации тестов")] = None,
 ) -> None:
-    """Generate comprehensive tests for your code."""
+    """Сгенерировать тесты для вашего кода."""
     _ensure_api_key()
     from gib.cli import ui
 
@@ -371,9 +371,9 @@ def cmd_test(
 
 @app.command("docs")
 def cmd_docs(
-    paths: Annotated[Optional[list[Path]], typer.Argument(help="Files to document")] = None,
+    paths: Annotated[Optional[list[Path]], typer.Argument(help="Файлы для документирования")] = None,
 ) -> None:
-    """Generate documentation for your code."""
+    """Сгенерировать документацию для вашего кода."""
     _ensure_api_key()
     from gib.cli import ui
 
@@ -394,9 +394,9 @@ def cmd_docs(
 
 @app.command("watch")
 def cmd_watch(
-    path: Annotated[Optional[Path], typer.Argument(help="Directory to watch")] = None,
+    path: Annotated[Optional[Path], typer.Argument(help="Папка для слежения")] = None,
 ) -> None:
-    """Watch for file changes and provide live AI feedback."""
+    """Следить за изменениями файлов и давать AI-обратную связь в реальном времени."""
     _ensure_api_key()
     from gib.cli.watch import start_watch
 
@@ -411,7 +411,7 @@ def cmd_watch(
 
 @app.command("chat")
 def cmd_chat() -> None:
-    """Open interactive chat mode with project context."""
+    """Открыть интерактивный чат с контекстом проекта."""
     _ensure_api_key()
     from gib.cli.chat import start_chat
     _run(start_chat())
@@ -425,14 +425,14 @@ def cmd_chat() -> None:
 def cmd_resume(
     thread_id: Annotated[
         Optional[str],
-        typer.Option("--id", help="Thread ID paused run to resume"),
+        typer.Option("--id", help="ID потока приостановленной задачи для возобновления"),
     ] = None,
     list_runs: Annotated[
         bool,
-        typer.Option("--list", "-l", help="List paused workflows"),
+        typer.Option("--list", "-l", help="Список приостановленных задач"),
     ] = False,
 ) -> None:
-    """Resume a workflow paused due to exhausted OpenRouter credits."""
+    """Возобновить задачу, приостановленную из-за нехватки кредитов OpenRouter."""
     _ensure_api_key()
     from gib.cli import ui
 
@@ -464,7 +464,7 @@ def cmd_resume(
 
 @app.command("set-key")
 def cmd_set_key() -> None:
-    """Update your OpenRouter API key."""
+    """Обновить API-ключ OpenRouter."""
     import os
 
     gib_dir = Path.home() / ".gib"

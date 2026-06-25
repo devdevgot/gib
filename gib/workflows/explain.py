@@ -18,7 +18,7 @@ from gib.workflows.base import BaseWorkflow
 async def _node_explainer(state: GibState) -> dict:
     """Специализированный explainer — передаёт задачу как запрос на объяснение."""
     # Модифицируем запрос для режима объяснения
-    modified = {**state, "user_request": f"Explain this code in detail: {state.get('user_request', '')}"}
+    modified = {**state, "user_request": f"Подробно объясни этот код: {state.get('user_request', '')}"}
     return await node_researcher(modified)
 
 

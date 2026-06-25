@@ -130,6 +130,6 @@ async def _analyze_change(path: Path) -> None:
             max_tokens=512,
         )
         console.print(Markdown(resp.content))
-        console.print(f"  [cost]{resp.cost_usd:.5f}$[/]  [dim]{resp.latency_ms}ms[/]\n")
+        console.print(f"  [стоимость]{resp.cost_usd:.5f}$[/]  [dim]{resp.latency_ms}ms[/]\n")
     except Exception as e:
         console.print(f"[error]Ошибка анализа: {e}[/]")

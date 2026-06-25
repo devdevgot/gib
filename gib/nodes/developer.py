@@ -1,49 +1,48 @@
-"""Node: Developer Agent — пишет код по архитектурному плану.
-
-Запускается параллельно с Architect и Researcher (после того как план готов).
-При повторной итерации учитывает замечания ревьюера.
-"""
+"""Node: Developer Agent — пишет код по архитектурному плану."""
 from __future__ import annotations
 
 from gib.core.container import Container
 from gib.core.state import GibState
 from gib.core.types import AgentOutput, AgentRole, TaskType
+from gib.prompts.locale import RUSSIAN_ONLY
 from gib.utils import get_logger
 
 logger = get_logger("gib.nodes.developer")
 
-_DEVELOPER_SYSTEM = """\
-You are a Senior Software Engineer. You write production-quality code.
+_DEVELOPER_SYSTEM = f"""\
+Ты — ведущий инженер-разработчик. Пишешь production-качественный код.
 
-Rules:
-- Write complete, working code — not pseudocode or examples
-- Follow existing code style and conventions
-- Add proper error handling
-- Write self-documenting code with clear variable names
-- Include docstrings for public functions
-- Never leave TODO comments — implement everything
-- When modifying a file, show the COMPLETE modified file (not just the diff)
-- Use EXACT file paths as listed in "Relevant Files" below — do not invent paths
+Правила:
+- Пиши полный рабочий код — не псевдокод и не примеры
+- Следуй стилю и соглашениям существующего кода
+- Добавляй корректную обработку ошибок
+- Пиши самодокументируемый код с понятными именами
+- Добавляй docstring для публичных функций
+- Никогда не оставляй TODO — реализуй всё полностью
+- При изменении файла показывай ПОЛНЫЙ изменённый файл (не только diff)
+- Используй ТОЧНЫЕ пути из раздела «Релевантные файлы» — не выдумывай пути
 
-Output format:
-1. Brief explanation of your approach (2-5 lines)
-2. Each file as a separate block:
+Формат ответа:
+1. Краткое объяснение подхода (2–5 строк) на русском языке
+2. Каждый файл отдельным блоком:
 
 ### path/to/file.py
 ```python
-<complete file content>
+<полное содержимое файла>
 ```
 
-CRITICAL: The path after ### must exactly match one of the paths in "Relevant Files",
-or be a new file path that makes sense for the project structure.
+КРИТИЧНО: путь после ### должен точно совпадать с одним из путей в «Релевантные файлы»
+или быть новым путём, логичным для структуры проекта.
+
+{RUSSIAN_ONLY}
 """
 
 _RETRY_SUFFIX = """\
 
-## ⚠️ Previous Review Feedback (MUST FIX ALL)
+## ⚠️ Замечания ревьюера (ОБЯЗАТЕЛЬНО ИСПРАВИТЬ ВСЕ)
 {review_comments}
 
-The reviewer rejected your previous implementation. Fix ALL issues listed above.
+Ревьюер отклонил предыдущую реализацию. Исправь ВСЕ перечисленные проблемы.
 """
 
 
@@ -56,42 +55,39 @@ def _build_developer_prompt(state: GibState) -> str:
     session_context = state.get("session_context", "")
     comments = state.get("review_comments", [])
 
-    # Список файлов которые можно редактировать
     if relevant_files:
         files_list = "\n".join(f"  - {f}" for f in relevant_files)
-        relevant_section = f"\n## Relevant Files (use EXACT paths in ### headers)\n{files_list}"
+        relevant_section = (
+            f"\n## Релевантные файлы (используй ТОЧНЫЕ пути в заголовках ###)\n{files_list}"
+        )
     else:
         relevant_section = ""
 
-    # Контекст файлов — полный контент
     file_context = ""
     for path in relevant_files:
         content = file_contents.get(path, "")
         if not content:
             continue
-        # До 8k символов на файл
         preview = content[:12000]
         if len(content) > 12000:
-            preview += f"\n\n... [truncated at 12000 chars, full file is {len(content)} chars]"
+            preview += f"\n\n... [обрезано на 12000 символов, полный файл {len(content)} символов]"
         file_context += f"\n### {path}\n```\n{preview}\n```\n"
 
-    # Если relevant_files пуст — fallback на все file_contents (старое поведение)
     if not file_context and file_contents:
         for path, content in list(file_contents.items())[:15]:
             preview = content[:4000]
             file_context += f"\n### {path}\n```\n{preview}\n```\n"
 
     parts = [
-        f"## Task\n{state.get('user_request', '')}",
+        f"## Задача\n{state.get('user_request', '')}",
         f"\n{session_context}" if session_context else "",
         relevant_section,
-        f"\n## Architecture Plan\n{arch}" if arch else "",
-        f"\n## Existing Code{file_context}" if file_context else "",
+        f"\n## Архитектурный план\n{arch}" if arch else "",
+        f"\n## Существующий код{file_context}" if file_context else "",
     ]
 
     prompt = "\n".join(p for p in parts if p)
 
-    # Добавляем замечания ревьюера при повторной попытке
     if iteration > 1 and (review or comments):
         review_text = "\n".join(comments) if comments else review[:2000]
         prompt += _RETRY_SUFFIX.format(review_comments=review_text)
@@ -100,9 +96,7 @@ def _build_developer_prompt(state: GibState) -> str:
 
 
 async def node_developer(state: GibState) -> dict:
-    """
-    LangGraph Node: GPT пишет реализацию.
-    """
+    """LangGraph Node: пишет реализацию."""
     container = Container.instance()
     client = container.openrouter_client()
     router = container.model_router()
@@ -145,5 +139,5 @@ async def node_developer(state: GibState) -> dict:
         "total_cost_usd": resp.cost_usd,
         "total_latency_ms": resp.latency_ms,
         "models_used": [resp.model],
-        "logs": [f"[Developer] Iteration {iteration}, model={resp.model}, cost=${resp.cost_usd:.4f}"],
+        "logs": [f"[Developer] Итерация {iteration}, модель={resp.model}, стоимость=${resp.cost_usd:.4f}"],
     }

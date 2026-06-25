@@ -10,30 +10,33 @@ import re
 from gib.core.container import Container
 from gib.core.state import GibState
 from gib.core.types import AgentOutput, AgentRole, ReviewVerdict, TaskType
+from gib.prompts.locale import RUSSIAN_ONLY
 from gib.utils import get_logger
 
 logger = get_logger("gib.nodes.reviewer")
 
-_REVIEWER_SYSTEM = """\
-You are a Principal Software Engineer conducting a thorough code review.
+_REVIEWER_SYSTEM = f"""\
+Ты — principal-инженер, проводящий тщательное код-ревью.
 
-Review criteria:
-1. **Architecture** — SOLID principles, separation of concerns, dependency injection
-2. **Code Quality** — readability, naming, documentation, complexity
-3. **Performance** — algorithmic efficiency, unnecessary allocations, N+1 queries
-4. **Error Handling** — proper exception handling, edge cases, null safety
-5. **Maintainability** — testability, extensibility, coupling
-6. **Correctness** — logic errors, race conditions, data consistency
+Критерии ревью:
+1. **Архитектура** — SOLID, разделение ответственности, DI
+2. **Качество кода** — читаемость, именование, документация, сложность
+3. **Производительность** — эффективность алгоритмов, лишние аллокации, N+1
+4. **Обработка ошибок** — исключения, краевые случаи, null-safety
+5. **Сопровождаемость** — тестируемость, расширяемость, связность
+6. **Корректность** — логические ошибки, гонки, согласованность данных
 
-Verdict format (REQUIRED at the start of your response):
-- ✅ APPROVED — ready for production
-- ⚠️ NEEDS_FIX — has issues that must be fixed (list them)
-- ❌ REJECTED — fundamental problems requiring redesign
+Формат вердикта (ОБЯЗАТЕЛЬНО в начале ответа):
+- ✅ APPROVED — готово к продакшену
+- ⚠️ NEEDS_FIX — есть проблемы, которые нужно исправить (перечисли)
+- ❌ REJECTED — фундаментальные проблемы, нужен пересмотр
 
-After the verdict:
-- List specific issues with file/line references where possible
-- Prioritize: CRITICAL > HIGH > MEDIUM > LOW
-- Provide concrete fix suggestions
+После вердикта:
+- Перечисли конкретные проблемы с ссылками на файл/строку где возможно
+- Приоритеты: CRITICAL > HIGH > MEDIUM > LOW
+- Дай конкретные рекомендации по исправлению
+
+{RUSSIAN_ONLY}
 """
 
 
@@ -41,11 +44,13 @@ def _extract_verdict(text: str) -> tuple[ReviewVerdict, list[str]]:
     """Парсит вердикт и список замечаний из текста ревью."""
     lower = text.lower()
 
-    if "✅" in text or "approved" in lower:
+    if "✅" in text or "approved" in lower or "одобрен" in lower:
         verdict = ReviewVerdict.APPROVED
-    elif "❌" in text or "rejected" in lower:
+    elif "❌" in text or "rejected" in lower or "отклон" in lower:
         verdict = ReviewVerdict.REJECTED
-    elif "⚠️" in text or "needs_fix" in lower or "needs fix" in lower:
+    elif "⚠️" in text or "needs_fix" in lower or "needs fix" in lower or (
+        "нужн" in lower and "исправ" in lower
+    ):
         verdict = ReviewVerdict.NEEDS_FIX
     else:
         verdict = ReviewVerdict.APPROVED  # fallback
@@ -56,7 +61,10 @@ def _extract_verdict(text: str) -> tuple[ReviewVerdict, list[str]]:
     in_issues = False
     for line in lines:
         stripped = line.strip()
-        if any(kw in stripped.lower() for kw in ["issue", "problem", "critical", "high", "medium", "must fix"]):
+        if any(kw in stripped.lower() for kw in [
+            "issue", "problem", "critical", "high", "medium", "must fix",
+            "проблем", "критич", "высок", "средн", "исправ",
+        ]):
             in_issues = True
         if in_issues and re.match(r"^[\-\*\d\.\•]", stripped):
             clean = re.sub(r"^[\-\*\d\.\•\s]+", "", stripped).strip()
@@ -75,29 +83,30 @@ def _format_chunk(chunk: dict[str, str]) -> str:
 
 
 def _build_chunk_prompt(chunk: dict[str, str], chunk_idx: int, total: int, context: str) -> str:
-    header = f"## Code Review — Batch {chunk_idx}/{total}\n"
+    header = f"## Код-ревью — батч {chunk_idx}/{total}\n"
     if context:
-        header += f"\nProject context:\n{context[:500]}\n"
-    header += f"\nReview these files ({len(chunk)} files):\n\n"
+        header += f"\nКонтекст проекта:\n{context[:500]}\n"
+    header += f"\nПроверь эти файлы ({len(chunk)} файлов):\n\n"
     return header + _format_chunk(chunk)
 
 
 def _build_merge_prompt(partial_reviews: list[str], project_context: str) -> str:
     parts = [
-        "## Merge Partial Code Reviews into One Final Report\n",
-        f"Project: {project_context[:300]}\n",
-        f"Total batches reviewed: {len(partial_reviews)}\n\n",
+        "## Объединение частичных ревью в финальный отчёт\n",
+        f"Проект: {project_context[:300]}\n",
+        f"Проверено батчей: {len(partial_reviews)}\n\n",
     ]
     for i, review in enumerate(partial_reviews, 1):
-        parts.append(f"### Batch {i} Review\n{review}\n")
+        parts.append(f"### Ревью батча {i}\n{review}\n")
     parts.append(
-        "\n## Your Task\n"
-        "Consolidate all findings into ONE final report:\n"
-        "1. Start with overall verdict: ✅ APPROVED / ⚠️ NEEDS_FIX / ❌ REJECTED\n"
-        "2. Deduplicate — merge similar issues from different batches\n"
-        "3. Prioritize: CRITICAL > HIGH > MEDIUM > LOW\n"
-        "4. Include file references for each issue\n"
-        "5. End with a summary of the most important fixes needed\n"
+        "\n## Твоя задача\n"
+        "Объедини все находки в ОДИН финальный отчёт:\n"
+        "1. Начни с общего вердикта: ✅ APPROVED / ⚠️ NEEDS_FIX / ❌ REJECTED\n"
+        "2. Убери дубликаты — объедини похожие проблемы из разных батчей\n"
+        "3. Приоритеты: CRITICAL > HIGH > MEDIUM > LOW\n"
+        "4. Укажи файлы для каждой проблемы\n"
+        "5. Заверши кратким списком самых важных исправлений\n"
+        "\nВесь отчёт — на русском языке."
     )
     return "\n".join(parts)
 
@@ -110,20 +119,19 @@ def _build_reviewer_prompt(state: GibState) -> str:
     iteration = state.get("review_iteration", 1)
     files = state.get("file_contents", {})
 
-    parts = [f"## Task Being Reviewed\n{state.get('user_request', '')}"]
+    parts = [f"## Задача на ревью\n{state.get('user_request', '')}"]
 
     if arch:
-        parts.append(f"\n## Architecture Design\n{arch[:2000]}")
+        parts.append(f"\n## Архитектура\n{arch[:2000]}")
     if code:
-        parts.append(f"\n## Implementation to Review\n{code[:8000]}")
+        parts.append(f"\n## Реализация для проверки\n{code[:8000]}")
     elif files:
-        # Нет code_result — используем file_contents
         files_text = _format_chunk(dict(list(files.items())[:10]))
-        parts.append(f"\n## Files to Review\n{files_text}")
+        parts.append(f"\n## Файлы для ревью\n{files_text}")
     if research:
-        parts.append(f"\n## Research Context\n{research[:1500]}")
+        parts.append(f"\n## Контекст исследования\n{research[:1500]}")
     if iteration > 1:
-        parts.append(f"\n⚠️ This is iteration {iteration} — previous review found issues.")
+        parts.append(f"\n⚠️ Итерация {iteration} — в предыдущем ревью были замечания.")
 
     return "\n".join(p for p in parts if p)
 
@@ -162,9 +170,9 @@ async def node_reviewer(state: GibState) -> dict:
     if chunks and len(chunks) > 1:
         # ── Chunked review: анализируем батч за батчем ──────────────────────
         project_info = (
-            f"Language: {state.get('project_context', {}).get('language', 'Unknown')}\n"
-            f"Frameworks: {state.get('project_context', {}).get('frameworks', [])}\n"
-            f"Request: {state.get('user_request', '')}"
+            f"Язык: {state.get('project_context', {}).get('language', 'неизвестен')}\n"
+            f"Фреймворки: {state.get('project_context', {}).get('frameworks', [])}\n"
+            f"Запрос: {state.get('user_request', '')}"
         )
         logger.info("[reviewer] Chunked review: %d батчей, модель=%s", len(chunks), model)
 
@@ -219,8 +227,8 @@ async def node_reviewer(state: GibState) -> dict:
         # Если один батч — используем его файлы напрямую
         if chunks and len(chunks) == 1:
             project_info = (
-                f"Language: {state.get('project_context', {}).get('language', 'Unknown')}\n"
-                f"Request: {state.get('user_request', '')}"
+                f"Язык: {state.get('project_context', {}).get('language', 'неизвестен')}\n"
+                f"Запрос: {state.get('user_request', '')}"
             )
             prompt = _build_chunk_prompt(chunks[0], 1, 1, project_info)
         else:
