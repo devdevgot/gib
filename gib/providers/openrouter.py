@@ -126,10 +126,30 @@ class OpenRouterClient:
                     latency_ms=latency_ms,
                 )
 
-            except (httpx.HTTPStatusError, httpx.RequestError) as e:
+            except httpx.HTTPStatusError as e:
                 last_error = e
                 attempt += 1
-                logger.warning("OpenRouter request failed (attempt %d): %s", attempt, e)
+                # Log the actual response body so we know WHY it failed
+                try:
+                    body = e.response.json()
+                except Exception:
+                    body = e.response.text
+                logger.warning(
+                    "OpenRouter request failed (attempt %d): %s\nModel: %s\nResponse: %s",
+                    attempt, e, resolved_model, body,
+                )
+                # 400 with this model slug — don't retry, fail fast
+                if e.response.status_code == 400:
+                    raise RuntimeError(
+                        f"OpenRouter 400 Bad Request for model '{resolved_model}'.\n"
+                        f"Details: {body}"
+                    ) from e
+                if attempt >= self._config.openrouter.max_retries:
+                    break
+            except httpx.RequestError as e:
+                last_error = e
+                attempt += 1
+                logger.warning("OpenRouter request error (attempt %d): %s", attempt, e)
                 if attempt >= self._config.openrouter.max_retries:
                     break
 

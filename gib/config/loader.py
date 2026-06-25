@@ -12,11 +12,23 @@ from pydantic import BaseModel, Field
 
 load_dotenv()
 
+# Bundled config — ships with the package
+_BUNDLED_CONFIG = Path(__file__).parent.parent.parent / "config.yaml"
+
 _CONFIG_SEARCH_PATHS = [
     Path.cwd() / "config.yaml",
     Path.home() / ".gib" / "config.yaml",
-    Path(__file__).parent.parent.parent / "config.yaml",
+    _BUNDLED_CONFIG,
 ]
+
+
+def _ensure_global_config() -> None:
+    """Copy bundled config.yaml to ~/.gib/ on first run so user can edit it."""
+    global_cfg = Path.home() / ".gib" / "config.yaml"
+    if not global_cfg.exists() and _BUNDLED_CONFIG.exists():
+        global_cfg.parent.mkdir(parents=True, exist_ok=True)
+        import shutil
+        shutil.copy(_BUNDLED_CONFIG, global_cfg)
 
 
 class RoutingRule(BaseModel):
@@ -26,13 +38,14 @@ class RoutingRule(BaseModel):
 
 
 class ModelsConfig(BaseModel):
-    default: str = "anthropic/claude-3.5-sonnet"
-    fast: str = "google/gemini-flash-1.5"
-    cheap: str = "deepseek/deepseek-chat"
-    large_context: str = "google/gemini-pro-1.5"
-    code: str = "anthropic/claude-3.5-sonnet"
-    docs: str = "google/gemini-flash-1.5"
-    tests: str = "deepseek/deepseek-chat"
+    default: str = "anthropic/claude-opus-4.8"
+    fast: str = "google/gemini-2.5-flash"
+    cheap: str = "deepseek/deepseek-v3.2"
+    large_context: str = "google/gemini-2.5-pro"
+    code: str = "openai/gpt-5.5"
+    reviewer: str = "google/gemini-2.5-pro"
+    docs: str = "google/gemini-2.5-pro"
+    tests: str = "openai/gpt-5.5"
 
 
 class OpenRouterConfig(BaseModel):
@@ -126,6 +139,7 @@ def _load_yaml(path: Path) -> dict[str, Any]:
 @lru_cache(maxsize=1)
 def get_config() -> Config:
     """Load and cache configuration."""
+    _ensure_global_config()
     raw: dict[str, Any] = {}
     for p in _CONFIG_SEARCH_PATHS:
         if p.exists():
