@@ -166,7 +166,7 @@ class Orchestrator:
             summary = (t.result_summary or "").strip()
             if summary:
                 lines.append(f"\n### [{ts}] {t.task_type.upper()}: {t.prompt[:120]}")
-                lines.append(summary[:1500])
+                lines.append(summary[:50_000])
         return "\n".join(lines)
 
     async def _run_workflow(
@@ -207,7 +207,7 @@ class Orchestrator:
                 final_state.get("final_output")
                 or final_state.get("review_result")
                 or ""
-            )[:3000],
+            )[:50_000],
             cost_usd=final_state.get("total_cost_usd", 0.0),
             project_path=str(self.root),
             status="completed" if final_state.get("success") else "failed",
