@@ -11,6 +11,13 @@ pipx install git+https://github.com/devdevgot/gib.git
 gib                              # первый запуск попросит API ключ
 ```
 
+**Обновление до последней версии:**
+
+```bash
+pipx install --force git+https://github.com/devdevgot/gib.git@main
+gib --version
+```
+
 Или вручную задать ключ:
 
 ```bash
