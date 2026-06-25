@@ -99,21 +99,22 @@ def _ensure_api_key() -> None:
 
 def _print_help() -> None:
     console.print(Panel.fit(
-        "[bold cyan]GIB[/] — AI Development Operating System\n\n"
-        "[dim]Free-form task:[/]\n"
-        "  [cyan]gib \"Add JWT authentication\"[/]\n"
+        "[bold cyan]GIB[/] — AI-ассистент для разработки\n\n"
+        "[dim]Свободная задача:[/]\n"
+        "  [cyan]gib \"Добавь JWT аутентификацию\"[/]\n"
         "  [cyan]gib \"Исправь ошибку в auth.py\"[/]\n\n"
-        "[dim]Commands:[/]\n"
-        "  [cyan]gib review[/]            [dim]Code review[/]\n"
-        "  [cyan]gib fix [file][/]        [dim]Fix bugs[/]\n"
-        "  [cyan]gib refactor [path][/]   [dim]Refactor code[/]\n"
-        "  [cyan]gib test [file][/]       [dim]Generate tests[/]\n"
-        "  [cyan]gib docs [file][/]       [dim]Generate docs[/]\n"
-        "  [cyan]gib commit[/]            [dim]Smart git commit[/]\n"
-        "  [cyan]gib doctor[/]            [dim]Deep diagnostics[/]\n"
-        "  [cyan]gib explain <path>[/]    [dim]Explain code[/]\n"
-        "  [cyan]gib watch [dir][/]       [dim]Live file watcher[/]\n"
-        "  [cyan]gib chat[/]              [dim]Interactive chat[/]",
+        "[dim]Команды:[/]\n"
+        "  [cyan]gib review[/]            [dim]Код-ревью[/]\n"
+        "  [cyan]gib fix [файл][/]        [dim]Исправить баги[/]\n"
+        "  [cyan]gib refactor [путь][/]   [dim]Рефакторинг кода[/]\n"
+        "  [cyan]gib test [файл][/]       [dim]Сгенерировать тесты[/]\n"
+        "  [cyan]gib docs [файл][/]       [dim]Сгенерировать документацию[/]\n"
+        "  [cyan]gib commit[/]            [dim]Умный git-коммит[/]\n"
+        "  [cyan]gib doctor[/]            [dim]Глубокая диагностика[/]\n"
+        "  [cyan]gib explain <путь>[/]    [dim]Объяснить код[/]\n"
+        "  [cyan]gib watch [папка][/]     [dim]Слежение за файлами[/]\n"
+        "  [cyan]gib chat[/]              [dim]Интерактивный чат[/]\n"
+        "  [cyan]gib set-key[/]           [dim]Изменить API ключ[/]",
         border_style="cyan",
         title="[bold]gib[/]",
     ))
@@ -156,7 +157,7 @@ def cmd_ask(
 
     async def _run_it():
         orch = _get_orchestrator()
-        with ui.spinner("[cyan]GIB[/] thinking..."):
+        with ui.spinner("[cyan]GIB[/] думает..."):
             result = await orch.run_general(prompt)
         ui.print_project_info(result)
         ui.print_result(result)
@@ -179,7 +180,7 @@ def cmd_review(
     async def _run_it():
         orch = _get_orchestrator()
         resolved = [Path(p) for p in paths] if paths else None
-        with ui.spinner("[cyan]Reviewing code...[/]"):
+        with ui.spinner("[cyan]Проверяю код...[/]"):
             result = await orch.run_review(resolved)
         ui.print_project_info(result)
         ui.print_result(result)
@@ -203,7 +204,7 @@ def cmd_fix(
     async def _run_it():
         orch = _get_orchestrator()
         resolved = [Path(p) for p in paths] if paths else None
-        with ui.spinner("[cyan]Fixing bugs...[/]"):
+        with ui.spinner("[cyan]Исправляю баги...[/]"):
             result = await orch.run_fix(resolved, error=error)
         ui.print_project_info(result)
         ui.print_result(result)
@@ -225,7 +226,7 @@ def cmd_refactor(
 
     async def _run_it():
         orch = _get_orchestrator()
-        with ui.spinner("[cyan]Refactoring...[/]"):
+        with ui.spinner("[cyan]Рефакторю...[/]"):
             result = await orch.run_refactor([Path(p) for p in paths])
         ui.print_project_info(result)
         ui.print_result(result)
@@ -248,7 +249,7 @@ def cmd_commit(
 
     async def _run_it():
         orch = _get_orchestrator()
-        with ui.spinner("[cyan]Generating commit message...[/]"):
+        with ui.spinner("[cyan]Генерирую сообщение коммита...[/]"):
             result = await orch.run_commit()
 
         if not result.success:
@@ -258,7 +259,7 @@ def cmd_commit(
         console.print()
         console.print(Panel(
             f"[bold]{result.primary_output}[/]",
-            title="[dim]Suggested commit message[/]",
+            title="[dim]Предлагаемое сообщение коммита[/]",
             border_style="cyan",
         ))
 
@@ -267,11 +268,11 @@ def cmd_commit(
         if status:
             console.print(f"\n[dim]Changes:[/]\n{status}")
 
-        if auto or ui.confirm("Commit with this message?"):
+        if auto or ui.confirm("Закоммитить с этим сообщением?"):
             git.commit(result.primary_output)
-            ui.print_success("Committed!")
+            ui.print_success("Закоммичено!")
         else:
-            console.print("[dim]Not committed.[/]")
+            console.print("[dim]Коммит отменён.[/]")
 
     _run(_run_it())
 
@@ -288,7 +289,7 @@ def cmd_doctor() -> None:
 
     async def _run_it():
         orch = _get_orchestrator()
-        with ui.spinner("[cyan]Running diagnostics...[/]"):
+        with ui.spinner("[cyan]Запускаю диагностику...[/]"):
             result = await orch.run_doctor()
         ui.print_project_info(result)
         ui.print_result(result)
@@ -314,7 +315,7 @@ def cmd_explain(
 
     async def _run_it():
         orch = _get_orchestrator()
-        with ui.spinner(f"[cyan]Explaining {path}...[/]"):
+        with ui.spinner(f"[cyan]Объясняю {path}...[/]"):
             result = await orch.run_explain(path)
         ui.print_result(result)
 
@@ -336,7 +337,7 @@ def cmd_test(
     async def _run_it():
         orch = _get_orchestrator()
         resolved = [Path(p) for p in paths] if paths else None
-        with ui.spinner("[cyan]Generating tests...[/]"):
+        with ui.spinner("[cyan]Генерирую тесты...[/]"):
             result = await orch.run_test(resolved)
         ui.print_project_info(result)
         ui.print_result(result)
@@ -359,7 +360,7 @@ def cmd_docs(
     async def _run_it():
         orch = _get_orchestrator()
         resolved = [Path(p) for p in paths] if paths else None
-        with ui.spinner("[cyan]Generating documentation...[/]"):
+        with ui.spinner("[cyan]Генерирую документацию...[/]"):
             result = await orch.run_docs(resolved)
         ui.print_project_info(result)
         ui.print_result(result)
@@ -380,7 +381,7 @@ def cmd_watch(
     from gib.cli.watch import start_watch
 
     watch_path = path or Path.cwd()
-    console.print(f"[cyan]Watching[/] {watch_path}  [dim](Ctrl+C to stop)[/]")
+    console.print(f"[cyan]Слежу за[/] {watch_path}  [dim](Ctrl+C для остановки)[/]")
     _run(start_watch(watch_path))
 
 

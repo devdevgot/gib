@@ -36,13 +36,13 @@ def print_project_info(result: OrchestratorResult) -> None:
         return
     p = result.project_profile
     table = Table(show_header=False, box=None, padding=(0, 1))
-    table.add_row("[dim]Language[/]", f"[cyan]{p.language}[/]")
-    table.add_row("[dim]Framework[/]", f"[cyan]{p.framework}[/]")
-    table.add_row("[dim]Package manager[/]", f"[cyan]{p.package_manager}[/]")
-    table.add_row("[dim]Git[/]", "[green]yes[/]" if p.has_git else "[red]no[/]")
-    table.add_row("[dim]Docker[/]", "[green]yes[/]" if p.has_docker else "[dim]no[/]")
-    table.add_row("[dim]Tests[/]", "[green]yes[/]" if p.has_tests else "[yellow]no[/]")
-    console.print(Panel(table, title="[dim]Project[/]", border_style="dim", expand=False))
+    table.add_row("[dim]Язык[/]", f"[cyan]{p.language}[/]")
+    table.add_row("[dim]Фреймворк[/]", f"[cyan]{p.framework}[/]")
+    table.add_row("[dim]Менеджер пакетов[/]", f"[cyan]{p.package_manager}[/]")
+    table.add_row("[dim]Git[/]", "[green]есть[/]" if p.has_git else "[red]нет[/]")
+    table.add_row("[dim]Docker[/]", "[green]есть[/]" if p.has_docker else "[dim]нет[/]")
+    table.add_row("[dim]Тесты[/]", "[green]есть[/]" if p.has_tests else "[yellow]нет[/]")
+    console.print(Panel(table, title="[dim]Проект[/]", border_style="dim", expand=False))
 
 
 def print_result(result: OrchestratorResult, show_meta: bool = True) -> None:
@@ -78,19 +78,19 @@ def print_diff(diff: str) -> None:
         console.print("[dim]No changes[/]")
 
 
-def confirm(prompt: str = "Apply changes?") -> bool:
+def confirm(prompt: str = "Применить изменения?") -> bool:
     """Ask user for Y/N confirmation."""
     console.print(f"\n[bold]{prompt}[/]")
-    console.print("  [bold green]\\[Y][/] Yes   [bold red]\\[N][/] No")
+    console.print("  [bold green]\\[Y][/] Да   [bold red]\\[N][/] Нет")
     while True:
         try:
             answer = input("  > ").strip().upper()
         except (EOFError, KeyboardInterrupt):
-            console.print("\n[dim]Cancelled[/]")
+            console.print("\n[dim]Отмена[/]")
             return False
-        if answer in ("Y", "YES", ""):
+        if answer in ("Y", "YES", "Д", "ДА", ""):
             return True
-        if answer in ("N", "NO"):
+        if answer in ("N", "NO", "Н", "НЕТ"):
             return False
 
 

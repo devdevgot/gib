@@ -48,7 +48,7 @@ async def start_watch(watch_path: Path) -> None:
         from watchdog.observers import Observer
         from watchdog.events import FileSystemEventHandler
     except ImportError:
-        console.print("[error]watchdog not installed. Run: pip install watchdog[/]")
+        console.print("[error]watchdog не установлен. Запустите: pip install watchdog[/]")
         return
 
     queue: asyncio.Queue = asyncio.Queue()
@@ -64,7 +64,7 @@ async def start_watch(watch_path: Path) -> None:
     observer.schedule(_Handler(), str(watch_path), recursive=True)
     observer.start()
 
-    console.print("[dim]Watching for changes... (Ctrl+C to stop)[/]\n")
+    console.print("[dim]Слежу за изменениями... (Ctrl+C для остановки)[/]\n")
 
     try:
         while True:
@@ -81,11 +81,11 @@ async def start_watch(watch_path: Path) -> None:
                 except asyncio.QueueEmpty:
                     break
 
-            console.print(f"\n[cyan]Changed:[/] {path}")
+            console.print(f"\n[cyan]Изменён:[/] {path}")
             await _analyze_change(path)
 
     except KeyboardInterrupt:
-        console.print("\n[dim]Watch stopped[/]")
+        console.print("\n[dim]Слежение остановлено[/]")
     finally:
         observer.stop()
         observer.join()
@@ -118,8 +118,8 @@ async def _analyze_change(path: Path) -> None:
         msgs = PromptLibrary.watch_analyze(diff[:4000], profile)
     else:
         msgs = [
-            {"role": "system", "content": "You are GIB. A file was saved. Briefly analyze it for issues (max 200 words)."},
-            {"role": "user", "content": f"File: {path}\n\n```\n{code[:3000]}\n```"},
+            {"role": "system", "content": "Ты — GIB. Файл был сохранён. Кратко проанализируй его на наличие проблем (максимум 200 слов). Отвечай только на русском языке."},
+            {"role": "user", "content": f"Файл: {path}\n\n```\n{code[:3000]}\n```"},
         ]
 
     try:
@@ -132,4 +132,4 @@ async def _analyze_change(path: Path) -> None:
         console.print(Markdown(resp.content))
         console.print(f"  [cost]{resp.cost_usd:.5f}$[/]  [dim]{resp.latency_ms}ms[/]\n")
     except Exception as e:
-        console.print(f"[error]Watch analysis failed: {e}[/]")
+        console.print(f"[error]Ошибка анализа: {e}[/]")

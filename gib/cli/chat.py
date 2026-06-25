@@ -19,7 +19,7 @@ async def start_chat() -> None:
     from gib.workspace import ProjectAnalyzer
 
     console.print(Panel.fit(
-        "[bold cyan]GIB Chat[/]  [dim]Type your message. 'exit' or Ctrl+C to quit.[/]",
+        "[bold cyan]GIB Chat[/]  [dim]Введите сообщение. 'exit' или Ctrl+C для выхода.[/]",
         border_style="cyan",
     ))
 
@@ -37,10 +37,11 @@ async def start_chat() -> None:
     memory = MemoryStore()
 
     # Build system message
-    system_msg = f"""You are GIB — an AI Development Operating System.
-You are helping with a {profile.language} / {profile.framework} project.
-Key directories: {', '.join(profile.key_dirs[:6])}.
-Be concise, precise, and actionable. Provide code examples when relevant.
+    system_msg = f"""Ты — GIB, AI-ассистент для разработки программного обеспечения.
+Ты помогаешь с проектом на {profile.language} / {profile.framework}.
+Ключевые директории: {', '.join(profile.key_dirs[:6])}.
+Будь кратким, точным и давай готовые к использованию результаты. Приводи примеры кода где уместно.
+ВАЖНО: всегда отвечай только на русском языке.
 """
 
     messages: list[ChatMessage] = [ChatMessage(role="system", content=system_msg)]
@@ -52,13 +53,13 @@ Be concise, precise, and actionable. Provide code examples when relevant.
             console.print("[bold cyan]Gib >[/] ", end="")
             user_input = input("").strip()
         except (EOFError, KeyboardInterrupt):
-            console.print("\n[dim]Chat ended[/]")
+            console.print("\n[dim]Чат завершён[/]")
             break
 
         if not user_input:
             continue
-        if user_input.lower() in ("exit", "quit", "q", "bye"):
-            console.print("[dim]Goodbye![/]")
+        if user_input.lower() in ("exit", "quit", "q", "bye", "выход", "стоп"):
+            console.print("[dim]До свидания![/]")
             break
 
         messages.append(ChatMessage(role="user", content=user_input))
