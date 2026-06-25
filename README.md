@@ -7,18 +7,24 @@
 ## Быстрый старт
 
 ```bash
+pipx install git+https://github.com/devdevgot/gib.git
+gib                              # первый запуск попросит API ключ
+```
+
+Или вручную задать ключ:
+
+```bash
+gib set-key
+# либо: export OPENROUTER_API_KEY=sk-or-v1-...
+```
+
+**Для разработки:**
+
+```bash
 git clone https://github.com/devdevgot/gib.git
 cd gib
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e .
-gib                              # первый запуск попросит API ключ
-```
-
-Или вручную:
-
-```bash
-export OPENROUTER_API_KEY=sk-or-v1-...
-# либо: gib set-key
 ```
 
 ---
