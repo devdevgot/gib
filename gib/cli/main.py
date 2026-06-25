@@ -390,5 +390,54 @@ def cmd_chat() -> None:
     _run(start_chat())
 
 
+@app.command("set-key")
+def cmd_set_key() -> None:
+    """Update your OpenRouter API key."""
+    import getpass
+    import os
+
+    gib_dir = Path.home() / ".gib"
+    gib_dir.mkdir(parents=True, exist_ok=True)
+    env_file = gib_dir / ".env"
+
+    current = os.environ.get("OPENROUTER_API_KEY", "")
+    if current:
+        masked = current[:8] + "..." + current[-4:]
+        console.print(f"[dim]Текущий ключ:[/] [cyan]{masked}[/]")
+
+    console.print("[dim]Получить ключ:[/] [cyan]https://openrouter.ai/keys[/]")
+    console.print()
+
+    while True:
+        try:
+            key = getpass.getpass("  Новый OpenRouter API key (sk-or-...): ").strip()
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[dim]Отмена.[/]")
+            raise typer.Exit(0)
+
+        if key.startswith("sk-or-") and len(key) > 20:
+            break
+        console.print("[red]  ✗ Неверный формат. Ключ должен начинаться с sk-or-[/]")
+
+    # Читаем существующий .env, заменяем или добавляем ключ
+    lines = []
+    replaced = False
+    if env_file.exists():
+        for line in env_file.read_text().splitlines():
+            if line.startswith("OPENROUTER_API_KEY="):
+                lines.append(f"OPENROUTER_API_KEY={key}")
+                replaced = True
+            else:
+                lines.append(line)
+
+    if not replaced:
+        lines.append(f"OPENROUTER_API_KEY={key}")
+
+    env_file.write_text("\n".join(lines) + "\n")
+    os.environ["OPENROUTER_API_KEY"] = key
+
+    console.print(f"[green]  ✓ Ключ обновлён в {env_file}[/]")
+
+
 if __name__ == "__main__":
     app()
