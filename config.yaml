@@ -5,52 +5,52 @@ openrouter:
   max_retries: 3
 
 models:
-  default: "anthropic/claude-sonnet-4"           # Главный архитектор
-  code: "openai/gpt-4o"                          # Главный разработчик
-  reviewer: "google/gemini-2.5-pro"              # Второе мнение / проверка
+  default: "anthropic/claude-opus-4.8"        # Главный архитектор
+  code: "openai/gpt-5.5"                       # Главный разработчик
+  reviewer: "google/gemini-2.5-pro"            # Ревьюер / второе мнение
   fast: "google/gemini-2.5-flash"
-  cheap: "deepseek/deepseek-chat"
+  cheap: "deepseek/deepseek-v3.2"
   large_context: "google/gemini-2.5-pro"
   docs: "google/gemini-2.5-pro"
-  tests: "openai/gpt-4o"
+  tests: "openai/gpt-5.5"
 
 routing:
   rules:
-    # ── Архитектор (Claude Sonnet 4) ──────────────────────────
+    # ── Архитектор (Claude Opus 4.8) ──────────────────────────
     - task_type: "architecture"
-      model: "anthropic/claude-sonnet-4"
+      model: "anthropic/claude-opus-4.8"
       reason: "Chief architect — system design & high-level decisions"
     - task_type: "general"
-      model: "anthropic/claude-sonnet-4"
+      model: "anthropic/claude-opus-4.8"
       reason: "Chief architect handles free-form tasks"
     - task_type: "refactor"
-      model: "anthropic/claude-sonnet-4"
+      model: "anthropic/claude-opus-4.8"
       reason: "Architect leads major refactors"
     - task_type: "explain"
-      model: "anthropic/claude-sonnet-4"
+      model: "anthropic/claude-opus-4.8"
       reason: "Deep explanations need the architect"
     - task_type: "chat"
-      model: "anthropic/claude-sonnet-4"
+      model: "anthropic/claude-opus-4.8"
       reason: "Interactive sessions with the architect"
 
-    # ── Разработчик (GPT-4o) ─────────────────────────────────
+    # ── Разработчик (GPT-5.5) ─────────────────────────────────
     - task_type: "fix"
-      model: "openai/gpt-4o"
+      model: "openai/gpt-5.5"
       reason: "Lead developer handles bug fixing"
     - task_type: "test"
-      model: "openai/gpt-4o"
+      model: "openai/gpt-5.5"
       reason: "Lead developer writes tests"
     - task_type: "commit"
-      model: "openai/gpt-4o"
+      model: "openai/gpt-5.5"
       reason: "Developer generates commit messages"
     - task_type: "watch"
-      model: "openai/gpt-4o"
+      model: "openai/gpt-5.5"
       reason: "Developer provides live code feedback"
     - task_type: "development"
-      model: "openai/gpt-4o"
+      model: "openai/gpt-5.5"
       reason: "Core development tasks handled by lead developer"
     - task_type: "security"
-      model: "openai/gpt-4o"
+      model: "openai/gpt-5.5"
       reason: "Security checks by lead developer"
 
     # ── Исследователь (Gemini 2.5 Pro) ─────────────────────────
@@ -58,7 +58,7 @@ routing:
       model: "google/gemini-2.5-pro"
       reason: "Research best practices, docs, and compatibility"
 
-    # ── Второе мнение (Gemini 2.5 Pro) ───────────────────────
+    # ── Ревьюер (Gemini 2.5 Pro) ───────────────────────────────
     - task_type: "review"
       model: "google/gemini-2.5-pro"
       reason: "Second opinion — thorough code review"

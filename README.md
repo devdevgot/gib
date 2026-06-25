@@ -8,7 +8,7 @@ GIB анализирует ваш проект, строит граф агент
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![OpenRouter](https://img.shields.io/badge/LLM-OpenRouter-orange.svg)](https://openrouter.ai/)
-[![Version](https://img.shields.io/badge/version-0.1.4-green.svg)](https://github.com/devdevgot/gib)
+[![Version](https://img.shields.io/badge/version-0.1.5-green.svg)](https://github.com/devdevgot/gib)
 
 ---
 
@@ -40,7 +40,7 @@ gib    # первый запуск попросит API-ключ OpenRouter
 pip uninstall gib -y 2>/dev/null || true
 pipx install --force git+https://github.com/devdevgot/gib.git@main
 hash -r
-gib --version   # 0.1.4
+gib --version   # 0.1.5
 ```
 
 ### Разработка из исходников
@@ -79,36 +79,38 @@ gib set-key                         # обновить API-ключ
 
 ## Модели по умолчанию
 
-GIB маршрутизирует задачи на разные модели через `config.yaml` (в репозитории или `~/.gib/config.yaml`):
+Трёхмодельная архитектура GIB (настраивается в `config.yaml`):
 
-| Роль | Модель | Задачи |
-|------|--------|--------|
-| **Архитектор** | `anthropic/claude-sonnet-4` | Планирование, архитектура, рефакторинг, объяснения, чат |
-| **Разработчик** | `openai/gpt-4o` | Код, багфиксы, тесты, коммиты, watch |
+| Роль | Модель OpenRouter | Задачи |
+|------|-------------------|--------|
+| **Архитектор** | `anthropic/claude-opus-4.8` | Планирование, архитектура, рефакторинг, объяснения, чат |
+| **Разработчик** | `openai/gpt-5.5` | Код, багфиксы, тесты, коммиты, watch |
 | **Исследователь** | `google/gemini-2.5-pro` | Best practices, документация, совместимость |
 | **Ревьюер** | `google/gemini-2.5-pro` | Код-ревью, doctor, длинный контекст |
-| **Быстрая / дешёвая** | `gemini-2.5-flash` / `deepseek-chat` | Вспомогательные задачи (file finder и др.) |
+| **Вспомогательные** | `gemini-2.5-flash` / `deepseek-v3.2` | file finder, дешёвые вспомогательные вызовы |
 
-Любую модель можно заменить на другую из каталога OpenRouter — достаточно отредактировать `routing.rules` в конфиге.
+Любую модель можно заменить в `~/.gib/config.yaml` — см. [каталог OpenRouter](https://openrouter.ai/models).
+
+> **Важно:** при обновлении удалите старый `~/.gib/config.yaml` или синхронизируйте модели вручную — файл копируется при первом запуске и не перезаписывается автоматически.
 
 ### Пример конфигурации
 
 ```yaml
-# ~/.gib/config.yaml  (копируется при первом запуске)
+# ~/.gib/config.yaml
 
 models:
-  default: "anthropic/claude-sonnet-4"
-  code: "openai/gpt-4o"
-  reviewer: "google/gemini-2.5-pro"
+  default: "anthropic/claude-opus-4.8"   # архитектор
+  code: "openai/gpt-5.5"                  # разработчик
+  reviewer: "google/gemini-2.5-pro"       # ревьюер
   fast: "google/gemini-2.5-flash"
-  cheap: "deepseek/deepseek-chat"
+  cheap: "deepseek/deepseek-v3.2"
 
 routing:
   rules:
     - task_type: "architecture"
-      model: "anthropic/claude-sonnet-4"
+      model: "anthropic/claude-opus-4.8"
     - task_type: "development"
-      model: "openai/gpt-4o"
+      model: "openai/gpt-5.5"
     - task_type: "research"
       model: "google/gemini-2.5-pro"
     - task_type: "review"
@@ -158,15 +160,15 @@ gib resume --id <uuid>  # продолжить конкретную задачу
   Анализ проекта ──► Контекст файлов ──► Поиск файлов ──► Планировщик
        │
        ▼
-   Архитектор (Claude)
+   Архитектор (Claude Opus 4.8)
        │
        ├──────────────────┐
        ▼                  ▼
-  Разработчик (GPT)   Исследователь (Gemini)   ← параллельно
+  Разработчик (GPT-5.5)   Исследователь (Gemini 2.5 Pro)   ← параллельно
        │                  │
        └────────┬─────────┘
                 ▼
-            Merge ──► Ревьюер (Gemini) ──► Security ──► Тесты ──► Патч
+            Merge ──► Ревьюер (Gemini 2.5 Pro) ──► Security ──► Тесты ──► Патч
                                                               │
                                                               ▼
                                                     Подтверждение ──► Git

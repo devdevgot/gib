@@ -147,7 +147,7 @@ async def _llm_select_files(
     client = container.openrouter_client()
 
     from gib.providers import ChatMessage
-    _model = get_config().models.cheap or "deepseek/deepseek-chat"
+    _model = get_config().models.cheap or "deepseek/deepseek-v3.2"
 
     all_files_str = _summarize_file_list(all_files, candidates)
     candidates_str = "\n".join(candidates) if candidates else "(не найдено)"
