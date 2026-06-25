@@ -1,2 +1,7 @@
 """GIB — AI Development Operating System."""
-__version__ = "0.1.1"
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("gib")
+except PackageNotFoundError:
+    __version__ = "0.0.0.dev"

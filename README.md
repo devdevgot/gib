@@ -14,8 +14,19 @@ gib                              # первый запуск попросит AP
 **Обновление до последней версии:**
 
 ```bash
+# Удалить старую pip-установку, если была (частая причина версии 0.1.0)
+pip uninstall gib -y 2>/dev/null || true
+
 pipx install --force git+https://github.com/devdevgot/gib.git@main
-gib --version
+hash -r   # bash: обновить кэш PATH
+gib --version   # должно быть gib 0.1.2
+```
+
+Если версия всё ещё старая — проверьте, какой бинарник запускается:
+
+```bash
+which -a gib
+pipx list
 ```
 
 Или вручную задать ключ:
