@@ -16,6 +16,7 @@ from gib.core.state import GibState, make_initial_state
 from gib.core.types import WorkflowType
 from gib.graph.registry import WorkflowRegistry
 from gib.memory import MemoryStore
+from gib.memory.context import build_project_memory_context, extract_task_summary
 from gib.router import ModelRouter, TaskType
 from gib.utils import get_logger
 from gib.workspace import ProjectProfile
@@ -124,7 +125,7 @@ class Orchestrator:
     """
 
     def __init__(self, root: Path | None = None) -> None:
-        self.root = root or Path.cwd()
+        self.root = (root or Path.cwd()).resolve()
         self._config = get_config()
         self._router = ModelRouter()
         self._memory = MemoryStore()
@@ -155,19 +156,13 @@ class Orchestrator:
         return self._profile
 
     def _build_session_context(self) -> str:
-        """Строит текстовый контекст из истории задач проекта."""
-        tasks = self._memory.recent_tasks(limit=10, project_path=str(self.root))
-        if not tasks:
-            return ""
-
-        lines = ["## Session History (previous tasks in this project)"]
-        for t in reversed(tasks):  # хронологический порядок
-            ts = t.created_at.strftime("%Y-%m-%d %H:%M") if t.created_at else "?"
-            summary = (t.result_summary or "").strip()
-            if summary:
-                lines.append(f"\n### [{ts}] {t.task_type.upper()}: {t.prompt[:120]}")
-                lines.append(summary[:50_000])
-        return "\n".join(lines)
+        """Строит текстовый контекст из истории задач и чата проекта."""
+        return build_project_memory_context(
+            self._memory,
+            str(self.root),
+            task_limit=20,
+            include_chat=True,
+        )
 
     async def _run_workflow(
         self,
@@ -204,11 +199,7 @@ class Orchestrator:
             task_type=task_type,
             prompt=prompt,
             model_used=" → ".join(models[-5:]),
-            result_summary=(
-                final_state.get("final_output")
-                or final_state.get("review_result")
-                or ""
-            )[:50_000],
+            result_summary=extract_task_summary(final_state)[:50_000],
             cost_usd=final_state.get("total_cost_usd", 0.0),
             project_path=str(self.root),
             status="completed" if final_state.get("success") else "failed",
@@ -246,6 +237,13 @@ class Orchestrator:
             )
         elif error:
             user_request = f"Исправить баги в коде. Ошибка: {error}"
+        else:
+            last_review = self._memory.get_last_review(str(self.root))
+            if last_review and last_review.result_summary:
+                user_request = (
+                    "Исправить все проблемы, найденные в ходе code review.\n\n"
+                    f"Результаты ревью:\n{last_review.result_summary}"
+                )
 
         final_state, profile = await self._run_workflow(
             WorkflowType.BUGFIX,
@@ -345,6 +343,17 @@ class Orchestrator:
         result = await agent.run(operation="commit_message", repo_path=self.root)
 
         elapsed = int((time.monotonic() - start) * 1000)
+
+        if result.success:
+            self._memory.save_task(
+                task_type=str(TaskType.COMMIT),
+                prompt="git commit message",
+                model_used=result.model,
+                result_summary=result.output[:50_000],
+                cost_usd=result.cost_usd,
+                project_path=str(self.root),
+                status="completed",
+            )
 
         return OrchestratorResult(
             task_type=str(TaskType.COMMIT),

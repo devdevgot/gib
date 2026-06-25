@@ -46,15 +46,20 @@ Respond ONLY with valid JSON in this exact format:
 def _build_planner_prompt(state: GibState) -> str:
     ctx = state.get("project_context", {})
     stack = state.get("detected_stack", {})
-    deps = state.get("dependencies_raw", "")[:2000]
-    readme = state.get("readme_content", "")[:1000]
+    deps = state.get("dependencies_raw", "")[:4000]
+    readme = state.get("readme_content", "")[:2000]
+    session_context = state.get("session_context", "")
 
     parts = [
         f"## User Request\n{state.get('user_request', '')}",
+    ]
+    if session_context:
+        parts.append(f"\n## Project Memory\n{session_context[:8000]}")
+    parts.extend([
         f"\n## Project Info\nLanguage: {ctx.get('language', 'Unknown')}",
         f"Frameworks: {', '.join(stack.get('frameworks', []))}",
         f"Has Docker: {ctx.get('has_docker', False)}",
-    ]
+    ])
     if deps:
         parts.append(f"\n## Dependencies (truncated)\n{deps}")
     if readme:

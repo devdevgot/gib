@@ -1,16 +1,11 @@
 """Node: FileFinder — семантический поиск релевантных файлов для задачи.
 
-Двухшаговый подход:
-1. ripgrep по ключевым словам из задачи → кандидаты
-2. LLM выбирает топ-20 файлов из полного списка + кандидатов
-
-Записывает в state:
-  - relevant_files: list[str]  — пути относительно root
-  - file_contents: dict        — только релевантные файлы, полный контент
+Дополняет (не заменяет) file_contents из context_builder:
+- выбирает приоритетные файлы для промптов агентов (relevant_files)
+- перечитывает выбранные файлы с увеличенным лимитом
 """
 from __future__ import annotations
 
-import asyncio
 import json
 import re
 import subprocess
@@ -40,7 +35,7 @@ You are a code navigator. Given a task and a list of files in a project, \
 select the most relevant files that will need to be READ or MODIFIED to complete the task.
 
 Rules:
-- Select at most 30 files
+- Select at most 40 files
 - Prefer specificity: pick the files most directly related to the task
 - Always include __init__.py files for modified packages
 - Always include config files if the task touches configuration
@@ -50,10 +45,11 @@ Example output:
 ["gib/nodes/developer.py", "gib/core/state.py", "gib/workflows/feature.py"]
 """
 
+_MAX_FILES_IN_PROMPT = 400
+
 
 def _extract_keywords(task: str) -> list[str]:
     """Извлекает ключевые слова для grep из текста задачи."""
-    # Убираем стоп-слова и берём значимые токены
     stop = {
         "the", "a", "an", "in", "of", "to", "and", "or", "for",
         "is", "it", "this", "that", "with", "on", "at", "by", "from",
@@ -62,7 +58,6 @@ def _extract_keywords(task: str) -> list[str]:
     }
     words = re.findall(r"[a-zA-Zа-яА-Я_][a-zA-Zа-яА-Я_0-9]{2,}", task)
     keywords = [w for w in words if w.lower() not in stop]
-    # Берём уникальные, не более 10
     seen: set[str] = set()
     result: list[str] = []
     for kw in keywords:
@@ -81,11 +76,9 @@ def _list_all_files(root: Path) -> list[str]:
     for p in root.rglob("*"):
         if p.is_dir():
             continue
-        # Пропускаем служебные директории
         parts = p.parts
         if any(part in _SKIP_DIRS or part.endswith(".egg-info") for part in parts):
             continue
-        # Пропускаем расширения
         if p.suffix in _SKIP_EXTS or p.name.endswith(".min.js") or p.name.endswith(".min.css"):
             continue
         rel = str(p.relative_to(root))
@@ -120,13 +113,32 @@ def _grep_candidates(root: Path, keywords: list[str]) -> list[str]:
     return sorted(candidates)
 
 
+def _summarize_file_list(all_files: list[str], candidates: list[str]) -> str:
+    """Сжатый список файлов для LLM — не отправляем весь репозиторий."""
+    if len(all_files) <= _MAX_FILES_IN_PROMPT:
+        return "\n".join(all_files)
+    candidate_set = set(candidates)
+    priority = [f for f in all_files if f in candidate_set]
+    rest = [f for f in all_files if f not in candidate_set]
+    head = priority[:200]
+    tail_budget = _MAX_FILES_IN_PROMPT - len(head)
+    if tail_budget > 0:
+        head.extend(rest[:tail_budget])
+    omitted = len(all_files) - len(head)
+    summary = "\n".join(head)
+    if omitted > 0:
+        summary += f"\n... [{omitted} more files omitted from listing]"
+    return summary
+
+
 async def _llm_select_files(
     task: str,
     all_files: list[str],
     candidates: list[str],
     project_context: dict,
+    session_context: str = "",
 ) -> list[str]:
-    """LLM выбирает топ-20 релевантных файлов."""
+    """LLM выбирает топ релевантных файлов."""
     from gib.config.loader import get_config
     container = Container.instance()
     client = container.openrouter_client()
@@ -134,13 +146,14 @@ async def _llm_select_files(
     from gib.providers import ChatMessage
     _model = get_config().models.cheap or "deepseek/deepseek-chat"
 
-    all_files_str = "\n".join(all_files)
+    all_files_str = _summarize_file_list(all_files, candidates)
     candidates_str = "\n".join(candidates) if candidates else "(none found)"
+    memory_block = f"\n## Prior Project Context\n{session_context[:3000]}\n" if session_context else ""
 
     prompt = f"""\
 ## Task
 {task}
-
+{memory_block}
 ## Project Info
 Language: {project_context.get('language', 'Unknown')}
 Frameworks: {', '.join(project_context.get('frameworks', []))}
@@ -148,7 +161,7 @@ Frameworks: {', '.join(project_context.get('frameworks', []))}
 ## Grep Candidates (files containing task keywords)
 {candidates_str}
 
-## All Project Files
+## Project Files
 {all_files_str}
 
 Select the most relevant files. Return ONLY a JSON array of paths."""
@@ -160,17 +173,14 @@ Select the most relevant files. Return ONLY a JSON array of paths."""
         ],
         model=_model,
         temperature=0.0,
-        max_tokens=1024,
+        max_tokens=2048,
     )
 
-    # Парсим JSON из ответа
     content = resp.content.strip()
-    # Убираем markdown-обёртку если есть
     if "```" in content:
         m = re.search(r"```(?:json)?\s*(\[[\s\S]+?\])\s*```", content)
         if m:
             content = m.group(1)
-    # Ищем JSON массив
     m = re.search(r"\[[\s\S]*\]", content)
     if m:
         try:
@@ -180,10 +190,10 @@ Select the most relevant files. Return ONLY a JSON array of paths."""
             pass
 
     logger.warning("[file_finder] LLM вернул неверный JSON, используем кандидатов")
-    return candidates[:30]
+    return candidates[:40]
 
 
-def _read_files(root: Path, rel_paths: list[str], max_bytes: int = 80_000) -> dict[str, str]:
+def _read_files(root: Path, rel_paths: list[str], max_bytes: int = 100_000) -> dict[str, str]:
     """Читает файлы, обрезает до max_bytes каждый."""
     result: dict[str, str] = {}
     for rel in rel_paths:
@@ -205,55 +215,74 @@ async def node_file_finder(state: GibState) -> dict:
     """
     LangGraph Node: находит релевантные файлы для задачи.
 
-    Вход:  state["user_request"], state["project_context"]
-    Выход: state["relevant_files"] (list[str])
-           state["file_contents"]  (dict[str, str]) — перезаписывает предыдущий
+    Дополняет file_contents из context_builder (merge, не replace).
+    relevant_files — приоритетный список для промптов агентов.
     """
     task = state.get("user_request", "")
     ctx = state.get("project_context", {})
     root = get_project_root(state)
+    target_paths = state.get("target_paths", [])
+    existing_contents: dict[str, str] = dict(state.get("file_contents", {}))
+    session_context = state.get("session_context", "")
 
     logger.info("[file_finder] Ищу релевантные файлы в %s", root)
 
-    # 1. Список всех файлов
-    all_files = _list_all_files(root)
+    # Явные target_paths — context_builder уже загрузил нужное
+    if target_paths and existing_contents:
+        selected = list(existing_contents.keys())
+        logger.info("[file_finder] Используем %d файлов из target_paths", len(selected))
+        return {
+            "relevant_files": selected,
+            "file_contents": existing_contents,
+            "logs": [f"[FileFinder] Using {len(selected)} target path files (no LLM selection)"],
+        }
+
+    all_files = state.get("metadata", {}).get("all_project_files") or _list_all_files(root)
     logger.info("[file_finder] Всего файлов: %d", len(all_files))
 
-    # 2. grep-кандидаты
     keywords = _extract_keywords(task)
-    logger.info("[file_finder] Ключевые слова: %s", keywords)
     candidates = _grep_candidates(root, keywords)
     logger.info("[file_finder] grep-кандидаты: %d файлов", len(candidates))
 
-    # 3. LLM выбирает
-    relevant = await _llm_select_files(task, all_files, candidates, ctx)
+    git_changed = set(state.get("metadata", {}).get("git_changed_files", []))
+    for path in git_changed:
+        if path not in candidates:
+            candidates.append(path)
+
+    relevant = await _llm_select_files(
+        task, all_files, candidates, ctx, session_context=session_context,
+    )
     logger.info("[file_finder] LLM выбрал: %d файлов", len(relevant))
 
-    # Валидация: оставляем только существующие + нормализуем пути
     valid: list[str] = []
     for rel in relevant:
-        abs_p = root / rel
-        if abs_p.exists():
+        if (root / rel).exists():
             valid.append(rel)
         else:
             logger.warning("[file_finder] Выбранный файл не существует: %s", rel)
 
-    # Если LLM выбрал мало — добавляем кандидатов от grep
     if len(valid) < 3 and candidates:
         for c in candidates:
             if c not in valid:
                 valid.append(c)
-        valid = valid[:30]
+        valid = valid[:40]
 
-    # 4. Читаем файлы
-    file_contents = _read_files(root, valid, max_bytes=60_000)
-    logger.info("[file_finder] Прочитано: %d файлов", len(file_contents))
+    # Merge: сохраняем полный скан + обновляем выбранные файлы с большим лимитом
+    upgraded = _read_files(root, valid, max_bytes=100_000)
+    merged_contents = {**existing_contents, **upgraded}
+
+    # relevant_files — приоритет для агентов; git-changed идут первыми
+    priority = [p for p in git_changed if p in merged_contents]
+    for p in valid:
+        if p not in priority:
+            priority.append(p)
 
     return {
-        "relevant_files": valid,
-        "file_contents": file_contents,
+        "relevant_files": priority[:40],
+        "file_contents": merged_contents,
         "logs": [
-            f"[FileFinder] {len(valid)} relevant files selected "
-            f"(from {len(all_files)} total, {len(candidates)} grep hits)"
+            f"[FileFinder] {len(priority)} priority files, "
+            f"{len(merged_contents)} total in context "
+            f"(from {len(all_files)} project files)"
         ],
     }

@@ -25,6 +25,13 @@ from gib.utils import get_logger
 logger = get_logger("gib.memory")
 
 
+def normalize_project_path(project_path: str) -> str:
+    """Canonical absolute path for consistent DB lookups."""
+    if not project_path:
+        return ""
+    return str(Path(project_path).expanduser().resolve())
+
+
 class Base(DeclarativeBase):
     pass
 
@@ -90,7 +97,7 @@ class MemoryStore:
                 model_used=model_used,
                 result_summary=result_summary[:50_000],
                 cost_usd=str(cost_usd),
-                project_path=project_path,
+                project_path=normalize_project_path(project_path) or project_path,
                 status=status,
             )
             session.add(record)
@@ -113,33 +120,71 @@ class MemoryStore:
 
     def get_last_review(self, project_path: str = "") -> TaskRecord | None:
         """Возвращает последний review/doctor для проекта."""
+        norm = normalize_project_path(project_path)
         with Session(self._engine) as session:
-            stmt = (
-                select(TaskRecord)
-                .where(TaskRecord.task_type.in_(["review", "doctor"]))
-                .order_by(desc(TaskRecord.created_at))
-                .limit(1)
-            )
-            if project_path:
-                stmt = stmt.where(TaskRecord.project_path == project_path)
-            return session.scalar(stmt)
+            for path in filter(None, [norm, project_path]):
+                stmt = (
+                    select(TaskRecord)
+                    .where(TaskRecord.task_type.in_(["review", "doctor"]))
+                    .where(TaskRecord.project_path == path)
+                    .order_by(desc(TaskRecord.created_at))
+                    .limit(1)
+                )
+                record = session.scalar(stmt)
+                if record:
+                    return record
+            return None
 
     def recent_tasks(self, limit: int = 20, project_path: str = "") -> list[TaskRecord]:
+        norm = normalize_project_path(project_path)
         with Session(self._engine) as session:
+            if norm:
+                stmt = (
+                    select(TaskRecord)
+                    .where(TaskRecord.project_path == norm)
+                    .order_by(desc(TaskRecord.created_at))
+                    .limit(limit)
+                )
+                tasks = list(session.scalars(stmt))
+                if tasks:
+                    return tasks
+                if project_path and project_path != norm:
+                    stmt = (
+                        select(TaskRecord)
+                        .where(TaskRecord.project_path == project_path)
+                        .order_by(desc(TaskRecord.created_at))
+                        .limit(limit)
+                    )
+                    return list(session.scalars(stmt))
             stmt = select(TaskRecord).order_by(desc(TaskRecord.created_at)).limit(limit)
-            if project_path:
-                stmt = stmt.where(TaskRecord.project_path == project_path)
             return list(session.scalars(stmt))
 
     # ── Sessions ──────────────────────────────────────────────────────────────
 
     def create_session(self, project_path: str = "") -> SessionRecord:
+        norm = normalize_project_path(project_path) or project_path
         with Session(self._engine) as session:
-            record = SessionRecord(project_path=project_path)
+            record = SessionRecord(project_path=norm)
             session.add(record)
             session.commit()
             session.refresh(record)
             return record
+
+    def get_latest_session(self, project_path: str = "") -> SessionRecord | None:
+        """Return the most recent chat session for a project."""
+        norm = normalize_project_path(project_path)
+        with Session(self._engine) as session:
+            for path in filter(None, [norm, project_path]):
+                stmt = (
+                    select(SessionRecord)
+                    .where(SessionRecord.project_path == path)
+                    .order_by(desc(SessionRecord.created_at))
+                    .limit(1)
+                )
+                record = session.scalar(stmt)
+                if record:
+                    return record
+            return None
 
     def append_session_message(self, session_id: int, role: str, content: str) -> None:
         with Session(self._engine) as db_session:
@@ -157,12 +202,33 @@ class MemoryStore:
                 return json.loads(record.messages_json or "[]")
             return []
 
+    def get_recent_chat_summary(self, project_path: str = "", limit_messages: int = 12) -> str:
+        """Summarize recent chat turns for workflow context."""
+        record = self.get_latest_session(project_path)
+        if not record:
+            return ""
+        messages = self.get_session_messages(record.id)
+        if not messages:
+            return ""
+
+        recent = messages[-limit_messages:]
+        lines = ["## Recent Chat History"]
+        for msg in recent:
+            role = msg.get("role", "user")
+            content = (msg.get("content") or "").strip()
+            if not content or role == "system":
+                continue
+            label = "User" if role == "user" else "Assistant"
+            lines.append(f"\n**{label}:** {content[:2000]}")
+        return "\n".join(lines) if len(lines) > 1 else ""
+
     # ── Project profile ───────────────────────────────────────────────────────
 
     def save_project_profile(self, project_path: str, profile: dict[str, Any]) -> None:
+        norm = normalize_project_path(project_path) or project_path
         with Session(self._engine) as session:
             existing = session.scalar(
-                select(ProjectProfile).where(ProjectProfile.project_path == project_path)
+                select(ProjectProfile).where(ProjectProfile.project_path == norm)
             )
             if existing:
                 existing.profile_json = json.dumps(profile)
@@ -170,17 +236,19 @@ class MemoryStore:
             else:
                 session.add(
                     ProjectProfile(
-                        project_path=project_path,
+                        project_path=norm,
                         profile_json=json.dumps(profile),
                     )
                 )
             session.commit()
 
     def get_project_profile(self, project_path: str) -> dict[str, Any]:
+        norm = normalize_project_path(project_path)
         with Session(self._engine) as session:
-            record = session.scalar(
-                select(ProjectProfile).where(ProjectProfile.project_path == project_path)
-            )
-            if record:
-                return json.loads(record.profile_json or "{}")
+            for path in filter(None, [norm, project_path]):
+                record = session.scalar(
+                    select(ProjectProfile).where(ProjectProfile.project_path == path)
+                )
+                if record:
+                    return json.loads(record.profile_json or "{}")
             return {}

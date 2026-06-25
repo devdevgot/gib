@@ -1,6 +1,7 @@
 """Node: ContextBuilder — собирает контекст проекта без LLM.
 
 Читает README, зависимости, конфигурации, исходные файлы.
+Для всех workflow выполняет полный скан проекта и раскладывает файлы по батчам.
 """
 from __future__ import annotations
 
@@ -14,24 +15,32 @@ from gib.utils.project_root import get_project_root
 
 logger = get_logger("gib.nodes.context_builder")
 
-# Лимиты контекста для разных режимов
-_FAST_PER_FILE_MAX = 10_000
-_FAST_TOTAL_MAX = 120_000
-_FULL_PER_FILE_MAX = 15_000
-_CHUNK_SIZE = 30_000
+# Лимиты контекста
+_PER_FILE_MAX = 20_000
+_CHUNK_SIZE = 40_000
+_MAX_TOTAL_CHARS = 2_000_000  # safety cap для огромных монореп
+
 _CONFIG_FILES = [
     "README.md", "README.rst", "README.txt",
     "package.json", "requirements.txt", "pyproject.toml",
     "composer.json", "go.mod", "Cargo.toml", "Gemfile",
     "docker-compose.yml", "docker-compose.yaml", "Dockerfile",
     ".gitignore", ".env.example", "Makefile",
+    "config.yaml", "render.yaml",
 ]
 
 _SOURCE_EXTENSIONS = {
     ".py", ".ts", ".js", ".tsx", ".jsx", ".go", ".rs",
     ".java", ".cs", ".rb", ".php", ".cpp", ".c", ".h",
     ".swift", ".kt", ".ex", ".exs",
+    ".md", ".yaml", ".yml", ".toml", ".json",
 }
+
+_ENTRY_POINT_NAMES = frozenset({
+    "main.py", "app.py", "manage.py", "wsgi.py", "asgi.py",
+    "index.ts", "index.js", "main.ts", "main.go", "lib.rs",
+    "__init__.py",
+})
 
 _IGNORE_DIRS = {
     "node_modules", "__pycache__", ".git", "dist", "build",
@@ -52,28 +61,56 @@ def _read_safe(path: Path, max_chars: int = 8000) -> str:
         return ""
 
 
-def _get_recent_git_diff(root: Path) -> str:
-    """Получает diff последнего коммита."""
-    try:
-        return subprocess.check_output(
-            ["git", "diff", "HEAD~1", "HEAD", "--stat"],
-            cwd=root, capture_output=True, text=True, timeout=5
-        ).stdout.strip()
-    except Exception:
-        return ""
+def _get_git_changed_files(root: Path) -> set[str]:
+    """Файлы изменённые в рабочей директории или последнем коммите."""
+    changed: set[str] = set()
+    for cmd in (
+        ["git", "diff", "--name-only", "HEAD"],
+        ["git", "diff", "--name-only", "--cached"],
+        ["git", "diff", "--name-only", "HEAD~1", "HEAD"],
+    ):
+        try:
+            out = subprocess.check_output(cmd, cwd=root, capture_output=True, text=True, timeout=5)
+            for line in out.splitlines():
+                line = line.strip()
+                if line:
+                    changed.add(line)
+        except Exception:
+            pass
+    return changed
+
+
+def _priority_key(
+    path: str,
+    *,
+    target_paths: set[str],
+    git_changed: set[str],
+) -> tuple[int, str]:
+    """Меньше = выше приоритет при обрезке по total cap."""
+    score = 100
+    if path in target_paths:
+        score = 0
+    elif any(path.startswith(t.rstrip("/") + "/") or path == t for t in target_paths):
+        score = 10
+    if path in git_changed:
+        score = min(score, 20)
+    if Path(path).name in _ENTRY_POINT_NAMES:
+        score = min(score, 30)
+    if path.startswith("tests/") or "/tests/" in path:
+        score += 40
+    return (score, path)
 
 
 def _find_all_files(
     root: Path,
     target_paths: list[str],
-    per_file_max: int = 10000,
+    per_file_max: int = _PER_FILE_MAX,
 ) -> dict[str, str]:
     """
-    Собирает ВСЕ исходные файлы без общего лимита.
+    Собирает исходные файлы проекта.
 
-    Если указаны target_paths — только они.
+    Если указаны target_paths — только они (и их содержимое).
     Иначе — весь проект рекурсивно.
-    Каждый файл обрезается до per_file_max символов чтобы не раздувать один файл.
     """
     files: dict[str, str] = {}
 
@@ -98,7 +135,7 @@ def _find_all_files(
             p = Path(path_str)
             if not p.is_absolute():
                 p = root / p
-            if p.is_file() and p.suffix in _SOURCE_EXTENSIONS:
+            if p.is_file():
                 content = _read_safe(p, max_chars=per_file_max)
                 if content:
                     try:
@@ -112,6 +149,38 @@ def _find_all_files(
         _collect_dir(root)
 
     return files
+
+
+def _apply_total_cap(
+    files: dict[str, str],
+    *,
+    target_paths: list[str],
+    git_changed: set[str],
+    max_total: int = _MAX_TOTAL_CHARS,
+) -> dict[str, str]:
+    """Обрезает набор файлов по приоритету, если превышен safety cap."""
+    total = sum(len(v) for v in files.values())
+    if total <= max_total:
+        return files
+
+    target_set = set(target_paths)
+    ordered = sorted(
+        files.items(),
+        key=lambda kv: _priority_key(kv[0], target_paths=target_set, git_changed=git_changed),
+    )
+    trimmed: dict[str, str] = {}
+    used = 0
+    for path, content in ordered:
+        if used + len(content) > max_total:
+            logger.warning(
+                "[context_builder] Safety cap %d chars reached; dropped %d low-priority files",
+                max_total,
+                len(files) - len(trimmed),
+            )
+            break
+        trimmed[path] = content
+        used += len(content)
+    return trimmed
 
 
 def make_file_chunks(
@@ -128,7 +197,6 @@ def make_file_chunks(
 
     for path, content in file_contents.items():
         size = len(content)
-        # Если один файл больше chunk_size — всё равно кладём его отдельно
         if current_size + size > chunk_size and current:
             chunks.append(current)
             current = {}
@@ -142,30 +210,17 @@ def make_file_chunks(
     return chunks if chunks else [{}]
 
 
-# Экспортируем для использования в reviewer
-def _find_relevant_files(
-    root: Path,
-    target_paths: list[str],
-    max_files: int = 25,
-    max_chars_total: int = 30000,
-) -> dict[str, str]:
-    """Legacy — используется в не-review workflow для быстрого контекста."""
-    return _find_all_files(root, target_paths, per_file_max=5000)
-
-
 async def node_context_builder(state: GibState) -> dict:
     """
     LangGraph Node: собирает контекст без LLM.
 
-    Для review workflow — собирает ВСЕ файлы проекта и раскладывает по батчам.
-    Для остальных workflow — быстрый контекст (топ файлы).
+    Полный скан проекта для всех workflow + батчи для chunked review.
     """
     root = get_project_root(state)
     target_paths = state.get("target_paths", [])
     workflow_type = state.get("workflow_type", "")
     logger.info("[context_builder] workflow=%s, target=%s", workflow_type, target_paths)
 
-    # Конфигурационные файлы
     readme_content = ""
     deps_parts: list[str] = []
 
@@ -173,57 +228,56 @@ async def node_context_builder(state: GibState) -> dict:
         fp = root / cfg_file
         if not fp.exists():
             continue
-        content = _read_safe(fp, max_chars=5000)
+        content = _read_safe(fp, max_chars=8000)
         if not content:
             continue
         if cfg_file.startswith("README"):
             readme_content = content
-        elif cfg_file in {"requirements.txt", "pyproject.toml", "package.json",
-                           "composer.json", "go.mod", "Cargo.toml", "Gemfile"}:
+        elif cfg_file in {
+            "requirements.txt", "pyproject.toml", "package.json",
+            "composer.json", "go.mod", "Cargo.toml", "Gemfile",
+            "config.yaml", "render.yaml",
+        }:
             deps_parts.append(f"# {cfg_file}\n{content}")
 
     dependencies_raw = "\n\n".join(deps_parts)
+    git_changed = _get_git_changed_files(root)
 
-    # Review workflow — собираем ВСЕ файлы, разбиваем на батчи
-    if workflow_type in ("review", "doctor"):
-        file_contents = _find_all_files(root, target_paths, per_file_max=_FULL_PER_FILE_MAX)
-        chunks = make_file_chunks(file_contents, chunk_size=_CHUNK_SIZE)
-        total_chars = sum(len(v) for v in file_contents.values())
-        logger.info(
-            "[context_builder] Полный скан: %d файлов, %d chars, %d батчей",
-            len(file_contents), total_chars, len(chunks),
+    file_contents = _find_all_files(root, target_paths, per_file_max=_PER_FILE_MAX)
+    if not target_paths:
+        file_contents = _apply_total_cap(
+            file_contents,
+            target_paths=target_paths,
+            git_changed=git_changed,
         )
-        metadata_update = {"review_chunks": chunks, "review_chunks_total": len(chunks)}
-    else:
-        # Остальные workflow — расширенный контекст
-        file_contents = _find_all_files(root, target_paths, per_file_max=_FAST_PER_FILE_MAX)
-        trimmed: dict[str, str] = {}
-        total = 0
-        for k, v in file_contents.items():
-            if total + len(v) > _FAST_TOTAL_MAX:
-                break
-            trimmed[k] = v
-            total += len(v)
-        file_contents = trimmed
-        metadata_update = {}
-        logger.info(
-            "[context_builder] Расширенный контекст: %d файлов, %d chars",
-            len(file_contents), sum(len(v) for v in file_contents.values()),
-        )
+
+    chunks = make_file_chunks(file_contents, chunk_size=_CHUNK_SIZE)
+    total_chars = sum(len(v) for v in file_contents.values())
+    logger.info(
+        "[context_builder] Полный скан: %d файлов, %d chars, %d батчей",
+        len(file_contents), total_chars, len(chunks),
+    )
+
+    metadata_update = {
+        "project_chunks": chunks,
+        "project_chunks_total": len(chunks),
+        "review_chunks": chunks,
+        "review_chunks_total": len(chunks),
+        "all_project_files": list(file_contents.keys()),
+        "git_changed_files": sorted(git_changed),
+    }
 
     relevant_files = list(file_contents.keys())
 
-    result = {
+    return {
         "file_contents": file_contents,
         "relevant_files": relevant_files,
         "readme_content": readme_content,
         "dependencies_raw": dependencies_raw,
         "current_step": "context_built",
+        "metadata": metadata_update,
         "logs": [
-            f"[ContextBuilder] {len(file_contents)} files, "
-            f"{sum(len(v) for v in file_contents.values())} chars"
+            f"[ContextBuilder] {len(file_contents)} files, {total_chars} chars, "
+            f"{len(chunks)} chunks"
         ],
     }
-    if metadata_update:
-        result["metadata"] = metadata_update
-    return result

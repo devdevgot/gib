@@ -32,6 +32,7 @@ def _build_researcher_prompt(state: GibState) -> str:
     stack = state.get("detected_stack", {})
     deps = state.get("dependencies_raw", "")[:5000]
     arch = state.get("architecture_result", "")[:4000]
+    session_context = state.get("session_context", "")
     relevant_files: list[str] = state.get("relevant_files", [])
     file_contents: dict[str, str] = state.get("file_contents", {})
 
@@ -49,6 +50,10 @@ def _build_researcher_prompt(state: GibState) -> str:
 
     parts = [
         f"## Task to Research\n{state.get('user_request', '')}",
+    ]
+    if session_context:
+        parts.append(f"\n## Project Memory\n{session_context[:6000]}")
+    parts.extend([
         f"\n## Tech Stack\nLanguage: {ctx.get('language', 'Unknown')}",
         f"Frameworks: {', '.join(stack.get('frameworks', []))}",
         f"\n## Dependencies\n{deps}" if deps else "",
@@ -62,7 +67,7 @@ def _build_researcher_prompt(state: GibState) -> str:
             "\n4. What alternative patterns should be considered?"
             "\n5. Any gotchas or common mistakes to avoid?"
         ),
-    ]
+    ])
 
     return "\n".join(p for p in parts if p)
 

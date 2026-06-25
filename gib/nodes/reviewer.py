@@ -149,7 +149,11 @@ async def node_reviewer(state: GibState) -> dict:
 
     # Проверяем наличие батчей для chunked review
     metadata = state.get("metadata", {})
-    chunks: list[dict[str, str]] = metadata.get("review_chunks", [])
+    chunks: list[dict[str, str]] = (
+        metadata.get("review_chunks")
+        or metadata.get("project_chunks")
+        or []
+    )
 
     total_cost = 0.0
     total_latency = 0

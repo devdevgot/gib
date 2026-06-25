@@ -121,7 +121,7 @@ class GibState(TypedDict, total=False):
     error_message: str                         # Ошибка если success=False
 
     # ── Metadata ─────────────────────────────────────────────────────────────
-    metadata: dict[str, Any]
+    metadata: Annotated[dict[str, Any], _merge_dict]
 
 
 def make_initial_state(
