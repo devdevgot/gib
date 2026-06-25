@@ -86,10 +86,17 @@ class Config(BaseModel):
 
     @property
     def api_key(self) -> str:
-        key = os.environ.get("OPENROUTER_API_KEY", "")
+        # Always read fresh from env — never cached, so set-key works instantly
+        key = os.environ.get("OPENROUTER_API_KEY", "").strip()
+        if not key:
+            # Try loading ~/.gib/.env on the fly
+            global_env = Path.home() / ".gib" / ".env"
+            if global_env.exists():
+                load_dotenv(global_env, override=True)
+            key = os.environ.get("OPENROUTER_API_KEY", "").strip()
         if not key:
             raise ValueError(
-                "OPENROUTER_API_KEY not set. Run: export OPENROUTER_API_KEY=<your-key>"
+                "OPENROUTER_API_KEY not set. Run: gib set-key"
             )
         return key
 

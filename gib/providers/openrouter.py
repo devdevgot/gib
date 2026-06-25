@@ -102,7 +102,15 @@ class OpenRouterClient:
                     data = resp.json()
 
                 latency_ms = int((time.monotonic() - start) * 1000)
-                choice = data["choices"][0]["message"]["content"]
+                msg = data["choices"][0]["message"]
+                # Some models (Gemini thinking) return content=null with reasoning only
+                choice = msg.get("content") or ""
+                if not choice:
+                    # Fall back to reasoning text if available
+                    for rd in msg.get("reasoning_details", []):
+                        if rd.get("text"):
+                            choice = rd["text"]
+                            break
                 usage_raw = data.get("usage", {})
                 usage = UsageInfo(
                     prompt_tokens=usage_raw.get("prompt_tokens", 0),
