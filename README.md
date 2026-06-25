@@ -1,6 +1,27 @@
-# GIB — AI Development Operating System
+# GIB
 
-> Терминальный AI-оркестратор для разработки. Аналог Cursor Agent и Claude Code — работает в терминале, поддерживает любые модели через OpenRouter, управляет разработкой через граф агентов на LangGraph.
+**AI-оркестратор для разработки в терминале** — аналог Cursor Agent и Claude Code.
+
+GIB анализирует ваш проект, строит граф агентов на LangGraph и выполняет задачи через OpenRouter: архитектура, код, ревью, тесты, безопасность и git — с подтверждением перед применением изменений.
+
+> Все ответы, отчёты и сообщения CLI — **на русском языке**.
+
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![OpenRouter](https://img.shields.io/badge/LLM-OpenRouter-orange.svg)](https://openrouter.ai/)
+[![Version](https://img.shields.io/badge/version-0.1.4-green.svg)](https://github.com/devdevgot/gib)
+
+---
+
+## Возможности
+
+| Возможность | Описание |
+|-------------|----------|
+| **Мульти-агентный пайплайн** | Архитектор, разработчик, исследователь и ревьюер работают параллельно где возможно |
+| **Полный контекст проекта** | Сканирование репозитория, память между сессиями, семантический поиск файлов |
+| **Любые модели** | Claude, GPT, Gemini, DeepSeek и другие через [OpenRouter](https://openrouter.ai/models) |
+| **Checkpoint + resume** | При нехватке кредитов прогресс сохраняется — продолжение через `gib resume` |
+| **Human-in-the-loop** | Diff и подтверждение перед записью в git |
+| **Статический security scan** | SQL injection, XSS, секреты, JWT, weak crypto — без LLM |
 
 ---
 
@@ -8,42 +29,28 @@
 
 ```bash
 pipx install git+https://github.com/devdevgot/gib.git
-gib                              # первый запуск попросит API ключ
+gib    # первый запуск попросит API-ключ OpenRouter
 ```
 
-**Обновление до последней версии:**
+Получить ключ: [openrouter.ai/keys](https://openrouter.ai/keys)
+
+### Обновление
 
 ```bash
 pip uninstall gib -y 2>/dev/null || true
 pipx install --force git+https://github.com/devdevgot/gib.git@main
 hash -r
-gib --version
+gib --version   # 0.1.4
 ```
 
-**Если закончились кредиты OpenRouter:**
-
-GIB сохраняет прогресс workflow в checkpoint. После пополнения:
-
-```bash
-gib resume              # продолжить последнюю приостановленную задачу
-gib resume --list       # список приостановленных задач
-gib resume --id <uuid>  # продолжить конкретную задачу
-```
-
-Или вручную задать ключ:
-
-```bash
-gib set-key
-# либо: export OPENROUTER_API_KEY=sk-or-v1-...
-```
-
-**Для разработки:**
+### Разработка из исходников
 
 ```bash
 git clone https://github.com/devdevgot/gib.git
 cd gib
 python3 -m venv .venv && source .venv/bin/activate
-pip install -e .
+pip install -e ".[dev]"
+pytest
 ```
 
 ---
@@ -51,170 +58,171 @@ pip install -e .
 ## Команды
 
 ```bash
-gib "Добавь JWT авторизацию"      # свободная задача — полный пайплайн
-gib review [файлы]                 # code review + анализ безопасности
-gib fix [файлы] --error "..."      # исправить баги
-gib refactor <файлы>               # рефакторинг по SOLID
-gib explain <путь>                 # объяснить код
-gib test [файлы]                   # сгенерировать тесты
-gib docs [файлы]                   # сгенерировать документацию
-gib commit [--auto]                # умный git commit (Conventional Commits)
-gib doctor                         # полная диагностика проекта
-gib watch [папка]                  # live AI-фидбэк при сохранении файлов
-gib chat                           # интерактивный чат с контекстом проекта
-gib set-key                        # обновить API ключ
+gib "Добавь JWT авторизацию"       # свободная задача — полный пайплайн
+gib review [файлы]                  # код-ревью + security scan
+gib fix [файлы] --error "..."       # исправить баги
+gib refactor <файлы>                # рефакторинг по SOLID
+gib explain <путь>                  # объяснить код
+gib test [файлы]                    # сгенерировать тесты
+gib docs [файлы]                    # сгенерировать документацию
+gib commit [--auto]                 # умный git commit (Conventional Commits)
+gib doctor                          # полная диагностика проекта
+gib watch [папка]                   # live AI-фидбэк при сохранении файлов
+gib chat                            # интерактивный чат с контекстом проекта
+gib resume [--list] [--id <uuid>]   # продолжить после нехватки кредитов
+gib set-key                         # обновить API-ключ
 ```
 
-Полный справочник с примерами — [`COMMANDS.md`](./COMMANDS.md).
+Подробные примеры — в [`COMMANDS.md`](./COMMANDS.md).
+
+---
+
+## Модели по умолчанию
+
+GIB маршрутизирует задачи на разные модели через `config.yaml` (в репозитории или `~/.gib/config.yaml`):
+
+| Роль | Модель | Задачи |
+|------|--------|--------|
+| **Архитектор** | `anthropic/claude-sonnet-4` | Планирование, архитектура, рефакторинг, объяснения, чат |
+| **Разработчик** | `openai/gpt-4o` | Код, багфиксы, тесты, коммиты, watch |
+| **Исследователь** | `google/gemini-2.5-pro` | Best practices, документация, совместимость |
+| **Ревьюер** | `google/gemini-2.5-pro` | Код-ревью, doctor, длинный контекст |
+| **Быстрая / дешёвая** | `gemini-2.5-flash` / `deepseek-chat` | Вспомогательные задачи (file finder и др.) |
+
+Любую модель можно заменить на другую из каталога OpenRouter — достаточно отредактировать `routing.rules` в конфиге.
+
+### Пример конфигурации
+
+```yaml
+# ~/.gib/config.yaml  (копируется при первом запуске)
+
+models:
+  default: "anthropic/claude-sonnet-4"
+  code: "openai/gpt-4o"
+  reviewer: "google/gemini-2.5-pro"
+  fast: "google/gemini-2.5-flash"
+  cheap: "deepseek/deepseek-chat"
+
+routing:
+  rules:
+    - task_type: "architecture"
+      model: "anthropic/claude-sonnet-4"
+    - task_type: "development"
+      model: "openai/gpt-4o"
+    - task_type: "research"
+      model: "google/gemini-2.5-pro"
+    - task_type: "review"
+      model: "google/gemini-2.5-pro"
+```
+
+API-ключ хранится в `~/.gib/.env` (`OPENROUTER_API_KEY=sk-or-...`).
+
+---
+
+## Возобновление после нехватки кредитов
+
+При ошибке баланса OpenRouter GIB сохраняет checkpoint в `~/.gib/checkpoints.db` и метаданные задачи в `~/.gib/memory.db`.
+
+```bash
+gib resume              # продолжить последнюю приостановленную задачу
+gib resume --list       # список приостановленных задач
+gib resume --id <uuid>  # продолжить конкретную задачу
+```
 
 ---
 
 ## Архитектура
 
-GIB построен на **LangGraph** — каждая команда запускает отдельный граф агентов.  
-Агенты работают параллельно там, где это возможно, и последовательно там, где важен порядок.
+Каждая команда запускает отдельный **LangGraph workflow**. Агенты работают параллельно (`Send`) там, где нет зависимостей, и последовательно — где важен порядок.
 
 ### Workflows
 
 | Команда | Workflow | Граф |
 |---------|----------|------|
-| `gib "..."` | FEATURE | `analyzer → planner → [architect ‖ developer ‖ researcher] → merge → reviewer → security → tests → patch → git` |
-| `gib fix` | BUGFIX | `analyzer → context → developer → reviewer → security → patch → git` |
+| `gib "..."` | FEATURE | `analyzer → context → file_finder → planner → architect → [developer ‖ researcher] → merge → reviewer → security → tests → patch → approval → git` |
+| `gib fix` | BUGFIX | `analyzer → context → file_finder → developer → reviewer → security → patch → approval → git` |
 | `gib review` | REVIEW | `analyzer → context → reviewer → security` |
-| `gib refactor` | REFACTOR | `analyzer → context → architect → developer → reviewer → security → patch → git` |
+| `gib refactor` | REFACTOR | `analyzer → context → file_finder → architect → developer → reviewer → security → patch → approval → git` |
 | `gib explain` | EXPLAIN | `analyzer → context → explainer` |
 | `gib doctor` | DOCTOR | `analyzer → context → [reviewer ‖ security ‖ researcher] → merge` |
+| `gib test` / `gib docs` | FEATURE | тот же пайплайн, что и свободная задача |
 
-`‖` — параллельное выполнение через `Send` из LangGraph.
+`‖` — параллельное выполнение. Ревьюер может вернуть задачу разработчику (до 2 итераций).
 
-### Структура модулей
+### Пайплайн свободной задачи
+
+```
+Запрос пользователя
+       │
+       ▼
+  Анализ проекта ──► Контекст файлов ──► Поиск файлов ──► Планировщик
+       │
+       ▼
+   Архитектор (Claude)
+       │
+       ├──────────────────┐
+       ▼                  ▼
+  Разработчик (GPT)   Исследователь (Gemini)   ← параллельно
+       │                  │
+       └────────┬─────────┘
+                ▼
+            Merge ──► Ревьюер (Gemini) ──► Security ──► Тесты ──► Патч
+                                                              │
+                                                              ▼
+                                                    Подтверждение ──► Git
+```
+
+### Структура проекта
 
 ```
 gib/
-├── cli/            # Typer CLI — все команды
-├── orchestrator/   # Единая точка входа, делегирует в WorkflowRegistry
-├── core/
-│   ├── state.py    # GibState — единый TypedDict с reducers
-│   ├── types.py    # WorkflowType, AgentRole, ReviewVerdict, ...
-│   └── container.py # DI-контейнер зависимостей
-├── nodes/          # LangGraph ноды (один файл = одна нода)
-│   ├── analyzer.py        # анализ проекта
-│   ├── context_builder.py # сборка контекста файлов
-│   ├── task_planner.py    # декомпозиция задачи
-│   ├── architect.py       # архитектурные решения
-│   ├── developer.py       # генерация кода
-│   ├── researcher.py      # исследование и best practices
-│   ├── reviewer.py        # code review с авто-retry
-│   ├── security.py        # статический анализ безопасности
-│   ├── supervisor.py      # контроль качества
-│   ├── test_generator.py  # генерация тестов
-│   ├── patch_builder.py   # формирование патча
-│   ├── approval.py        # human-in-the-loop подтверждение
-│   ├── merge.py           # слияние параллельных результатов
-│   └── git_node.py        # применение изменений
-├── workflows/      # Сборка графов из нод
-│   ├── base.py     # BaseWorkflow (абстрактный)
-│   ├── feature.py  # Feature workflow
-│   ├── bugfix.py   # BugFix workflow
-│   ├── review.py   # Review workflow
-│   ├── refactor.py # Refactor workflow
-│   ├── explain.py  # Explain workflow
-│   └── doctor.py   # Doctor workflow
-├── graph/
-│   └── registry.py # WorkflowRegistry — реестр и запуск workflow
-├── agents/         # Legacy агенты (ProjectAnalyzer, Git, ...)
-├── providers/      # OpenRouter API клиент
-├── router/         # Умный выбор модели по типу задачи
-├── memory/         # SQLite долговременная память
-├── prompts/        # Шаблоны промптов
-├── workspace/      # Профиль проекта
-└── git/            # Git интеграция
+├── cli/              # Typer CLI — все команды
+├── orchestrator/     # Единая точка входа
+├── workflows/        # Сборка LangGraph-графов
+├── nodes/            # Узлы графа (один файл = одна нода)
+├── graph/registry.py # Реестр workflow
+├── core/             # GibState, типы, DI-контейнер
+├── providers/        # OpenRouter API
+├── router/           # Маршрутизация моделей по типу задачи
+├── memory/           # SQLite: задачи, чат, checkpoint resume
+├── prompts/          # Шаблоны промптов
+├── workspace/        # Анализ профиля проекта
+└── git/              # Git интеграция
 ```
 
-### GibState
+### Память
 
-Единое состояние, которое прокидывается через все ноды графа:
+| Файл | Назначение |
+|------|------------|
+| `~/.gib/memory.db` | История задач, чат-сессии, профили проектов, paused runs |
+| `~/.gib/checkpoints.db` | LangGraph checkpoints для `gib resume` |
+| `~/.gib/config.yaml` | Модели и маршрутизация |
+| `~/.gib/.env` | `OPENROUTER_API_KEY` |
 
-```python
-class GibState(TypedDict):
-    user_request: str
-    workflow_type: str
-    target_paths: list[str]
-    project_profile: dict
-    file_contexts: Annotated[list, _append]
-    subtasks: list[SubTask]
-    agent_outputs: Annotated[list[AgentOutput], _append]
-    code_result: str
-    review_result: str
-    research_result: str
-    security_issues: Annotated[list[SecurityIssue], _append]
-    patch_files: list[PatchFile]
-    final_output: str
-    models_used: Annotated[list[str], _append]
-    total_cost_usd: Annotated[float, _sum_float]
-    success: bool
-```
+Контекст предыдущих задач и чата подмешивается в новые workflow автоматически.
 
-### WorkflowRegistry (низкоуровневый API)
+---
+
+## Python API
 
 ```python
-from gib.graph.registry import WorkflowRegistry
-from gib.core.state import make_initial_state
-from gib.core.types import WorkflowType
-
-state = make_initial_state(
-    user_request="Исправить утечку памяти",
-    workflow_type=WorkflowType.BUGFIX.value,
-    target_paths=["app/worker.py"],
-    error_input="MemoryError: unable to allocate array",
-)
-
-result = await WorkflowRegistry.run(WorkflowType.BUGFIX, state)
-print(result["final_output"])
-```
-
-### Python API
-
-```python
+import asyncio
+from pathlib import Path
 from gib.orchestrator import Orchestrator
 
 orch = Orchestrator(root=Path("/my/project"))
 
-result = await orch.run_general("Добавь rate limiting")
-result = await orch.run_fix(paths=[Path("app/auth.py")], error="KeyError")
-result = await orch.run_review([Path("app/")])
-result = await orch.run_refactor([Path("app/services/")])
-result = await orch.run_explain(Path("app/core/pipeline.py"))
-result = await orch.run_doctor()
-result = await orch.run_commit()
+result = asyncio.run(orch.run_general("Добавь rate limiting"))
+result = asyncio.run(orch.run_fix(paths=[Path("app/auth.py")], error="KeyError"))
+result = asyncio.run(orch.run_review([Path("app/")]))
+result = asyncio.run(orch.run_resume())          # после нехватки кредитов
 
 print(result.primary_output)
-print(result.cost_str())     # "$0.0023"
+print(result.cost_str())       # "$0.0023"
+print(result.model_used)
 ```
 
----
-
-## Конфигурация
-
-`config.yaml` в корне проекта или `~/.gib/config.yaml`:
-
-```yaml
-models:
-  default: "anthropic/claude-sonnet-4.5"
-  fast: "google/gemini-2.5-flash"
-  cheap: "deepseek/deepseek-v3.2"
-
-routing:
-  rules:
-    - task_type: "review"
-      model: "anthropic/claude-sonnet-4.5"
-    - task_type: "docs"
-      model: "google/gemini-2.5-flash"
-    - task_type: "test"
-      model: "deepseek/deepseek-v3.2"
-```
-
-Поддерживается любая модель из OpenRouter: Claude, GPT, Gemini, DeepSeek, Llama, Mistral, Qwen.
+Низкоуровневый доступ через `WorkflowRegistry` — см. [`COMMANDS.md`](./COMMANDS.md).
 
 ---
 
@@ -222,19 +230,18 @@ routing:
 
 | Компонент | Библиотека |
 |-----------|-----------|
-| Граф агентов | `langgraph >= 1.2.6` |
-| LLM API | `httpx` + OpenRouter |
-| CLI | `typer` + `rich` |
-| Персистентность | `SQLAlchemy` + SQLite |
-| Async | `asyncio` + `aiofiles` |
-| Конфиг | `pydantic` + `python-dotenv` |
-| Git | `GitPython` |
-| Файловый watcher | `watchdog` |
+| Граф агентов | LangGraph + langgraph-checkpoint-sqlite |
+| LLM API | httpx → OpenRouter |
+| CLI | Typer + Rich |
+| Память | SQLAlchemy + SQLite |
+| Git | GitPython |
+| Watcher | watchdog |
 
 ## Требования
 
-- Python 3.12+
-- OpenRouter API ключ → [openrouter.ai/keys](https://openrouter.ai/keys)
+- Python **3.12+**
+- API-ключ [OpenRouter](https://openrouter.ai/keys)
+- Опционально: `ripgrep` (`rg`) — ускоряет поиск файлов в `file_finder`
 
 ## Лицензия
 
