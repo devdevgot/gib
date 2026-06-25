@@ -16,7 +16,7 @@ from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
 
-from gib.orchestrator import OrchestratorResult
+from gib.orchestrator import OrchestratorResult, PipelineStep
 from gib.utils.console import console
 
 
@@ -45,8 +45,41 @@ def print_project_info(result: OrchestratorResult) -> None:
     console.print(Panel(table, title="[dim]Проект[/]", border_style="dim", expand=False))
 
 
+def print_pipeline_steps(steps: list[PipelineStep]) -> None:
+    """Показывает шаги пайплайна в виде цепочки агентов."""
+    if not steps:
+        return
+
+    # Заголовок пайплайна
+    console.print()
+    console.print(Rule("[dim]Пайплайн агентов[/]", style="dim"))
+
+    # Краткая цепочка: Архитектор → Разработчик → Ревьюер
+    chain_parts = []
+    for step in steps:
+        model_short = step.model.split("/")[-1] if "/" in step.model else step.model
+        chain_parts.append(f"[cyan]{step.agent_name}[/] [dim]({model_short})[/]")
+    console.print("  " + " [dim]→[/] ".join(chain_parts))
+    console.print()
+
+    # Детали каждого шага
+    for step in steps:
+        cost_str = f"${step.cost_usd:.4f}" if step.cost_usd >= 0.001 else f"${step.cost_usd * 1000:.4f}m"
+        model_short = step.model.split("/")[-1] if "/" in step.model else step.model
+        console.print(
+            f"  [bold cyan]Шаг {step.step}[/] [dim]·[/] [yellow]{step.agent_name}[/] "
+            f"[dim]·[/] {model_short} [dim]·[/] {cost_str} [dim]·[/] {step.latency_ms}ms"
+        )
+
+
 def print_result(result: OrchestratorResult, show_meta: bool = True) -> None:
     """Print the orchestrator result with metadata."""
+    # Если это пайплайн — показываем шаги перед результатом
+    if result.is_pipeline and result.pipeline_steps:
+        print_pipeline_steps(result.pipeline_steps)
+        console.print(Rule("[dim]Финальный результат (ревью)[/]", style="dim"))
+        console.print()
+
     # Main output
     output = result.primary_output.strip()
     if output:
@@ -60,6 +93,8 @@ def print_result(result: OrchestratorResult, show_meta: bool = True) -> None:
 def _print_meta_line(result: OrchestratorResult) -> None:
     """Print cost / time / model as a single dim line."""
     parts: list[str] = []
+    if result.is_pipeline:
+        parts.append(f"[dim]pipeline[/]")
     if result.model_used:
         parts.append(f"[model]{result.model_used}[/]")
     if result.total_cost_usd > 0:

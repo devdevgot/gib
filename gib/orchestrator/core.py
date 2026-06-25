@@ -28,11 +28,23 @@ logger = get_logger("gib.orchestrator")
 
 
 @dataclass
+class PipelineStep:
+    """Один шаг пайплайна — результат одного агента."""
+    step: int
+    agent_name: str
+    model: str
+    output: str
+    cost_usd: float = 0.0
+    latency_ms: int = 0
+
+
+@dataclass
 class OrchestratorResult:
     task_type: str
     success: bool
     primary_output: str
     agent_results: list[AgentResult] = field(default_factory=list)
+    pipeline_steps: list[PipelineStep] = field(default_factory=list)
     total_cost_usd: float = 0.0
     total_latency_ms: int = 0
     model_used: str = ""
@@ -42,6 +54,10 @@ class OrchestratorResult:
         if self.total_cost_usd < 0.001:
             return f"${self.total_cost_usd * 1000:.4f}m"
         return f"${self.total_cost_usd:.4f}"
+
+    @property
+    def is_pipeline(self) -> bool:
+        return len(self.pipeline_steps) > 1
 
 
 class Orchestrator:
@@ -91,37 +107,103 @@ class Orchestrator:
         return "\n".join(parts)
 
     async def run_general(self, prompt: str) -> OrchestratorResult:
-        """Handle a free-form user prompt."""
+        """
+        Пайплайн: Claude (архитектор) → GPT-5.5 (разработчик) → Gemini (ревьюер).
+        """
+        from gib.prompts import PromptLibrary
+        from gib.providers import ChatMessage, OpenRouterClient
+
         start = time.monotonic()
         profile = await self._analyze_project()
-        task_type, model = self._router.route(prompt)
+        client = OpenRouterClient()
+        pipeline_steps: list[PipelineStep] = []
+        total_cost = 0.0
 
-        agent = DeveloperAgent()
-        result = await agent.run(
-            prompt=prompt,
-            task_type=task_type,
-            profile=profile,
+        file_context = self._collect_source_context(max_chars=15000)
+
+        # ── Шаг 1: Claude — анализ и план ────────────────────────────────
+        logger.info("Pipeline шаг 1/3: Claude (архитектор) анализирует задачу")
+        arch_model = self._router.select_model(TaskType.ARCHITECTURE)
+        arch_msgs = PromptLibrary.pipeline_architect(prompt, file_context, profile)
+        arch_resp = await client.chat(
+            [ChatMessage(**m) for m in arch_msgs],
+            model=arch_model,
+            temperature=0.3,
+            max_tokens=4096,
         )
+        total_cost += arch_resp.cost_usd
+        pipeline_steps.append(PipelineStep(
+            step=1,
+            agent_name="Архитектор",
+            model=arch_resp.model,
+            output=arch_resp.content,
+            cost_usd=arch_resp.cost_usd,
+            latency_ms=arch_resp.latency_ms,
+        ))
+
+        # ── Шаг 2: GPT-5.5 — реализация по плану ─────────────────────────
+        logger.info("Pipeline шаг 2/3: GPT-5.5 (разработчик) реализует код")
+        dev_model = self._router.select_model(TaskType.FIX)  # GPT-5.5
+        dev_msgs = PromptLibrary.pipeline_developer(
+            prompt, arch_resp.content, file_context, profile
+        )
+        dev_resp = await client.chat(
+            [ChatMessage(**m) for m in dev_msgs],
+            model=dev_model,
+            temperature=0.2,
+            max_tokens=8192,
+        )
+        total_cost += dev_resp.cost_usd
+        pipeline_steps.append(PipelineStep(
+            step=2,
+            agent_name="Разработчик",
+            model=dev_resp.model,
+            output=dev_resp.content,
+            cost_usd=dev_resp.cost_usd,
+            latency_ms=dev_resp.latency_ms,
+        ))
+
+        # ── Шаг 3: Gemini — ревью кода ────────────────────────────────────
+        logger.info("Pipeline шаг 3/3: Gemini (ревьюер) проверяет код")
+        rev_model = self._router.select_model(TaskType.REVIEW)  # Gemini 2.5 Pro
+        rev_msgs = PromptLibrary.pipeline_reviewer(
+            prompt, arch_resp.content, dev_resp.content, profile
+        )
+        rev_resp = await client.chat(
+            [ChatMessage(**m) for m in rev_msgs],
+            model=rev_model,
+            temperature=0.2,
+            max_tokens=8192,
+        )
+        total_cost += rev_resp.cost_usd
+        pipeline_steps.append(PipelineStep(
+            step=3,
+            agent_name="Ревьюер",
+            model=rev_resp.model,
+            output=rev_resp.content,
+            cost_usd=rev_resp.cost_usd,
+            latency_ms=rev_resp.latency_ms,
+        ))
 
         elapsed = int((time.monotonic() - start) * 1000)
         self._memory.save_task(
-            task_type=str(task_type),
+            task_type=str(TaskType.GENERAL),
             prompt=prompt,
-            model_used=result.model,
-            result_summary=result.output[:500],
-            cost_usd=result.cost_usd,
+            model_used=f"{arch_model} → {dev_model} → {rev_model}",
+            result_summary=rev_resp.content[:500],
+            cost_usd=total_cost,
             project_path=str(self.root),
-            status="completed" if result.success else "failed",
+            status="completed",
         )
 
         return OrchestratorResult(
-            task_type=str(task_type),
-            success=result.success,
-            primary_output=result.output,
-            agent_results=[result],
-            total_cost_usd=result.cost_usd,
+            task_type=str(TaskType.GENERAL),
+            success=True,
+            primary_output=rev_resp.content,
+            pipeline_steps=pipeline_steps,
+            total_cost_usd=total_cost,
             total_latency_ms=elapsed,
-            model_used=result.model,
+            model_used=rev_resp.model,
             project_profile=profile,
         )
 
@@ -162,9 +244,17 @@ class Orchestrator:
         )
 
     async def run_fix(self, paths: list[Path] | None = None, error: str = "") -> OrchestratorResult:
-        """Fix bugs in provided files."""
+        """
+        Пайплайн fix: GPT-5.5 (исправляет баг) → Gemini (проверяет исправление).
+        """
+        from gib.prompts import PromptLibrary
+        from gib.providers import ChatMessage, OpenRouterClient
+
         start = time.monotonic()
         profile = await self._analyze_project()
+        client = OpenRouterClient()
+        pipeline_steps: list[PipelineStep] = []
+        total_cost = 0.0
 
         if paths:
             code = self._collect_file_context(paths)
@@ -178,41 +268,83 @@ class Orchestrator:
                 primary_output="Нет кода для исправления. Укажите пути к файлам.",
             )
 
-        from gib.prompts import PromptLibrary
-        messages = PromptLibrary.fix(code, error=error, project=profile)
-
-        from gib.providers import ChatMessage, OpenRouterClient
-        client = OpenRouterClient()
-        model = self._router.select_model(TaskType.FIX)
-        resp = await client.chat([ChatMessage(**m) for m in messages], model=model)
-        result = AgentResult(
-            agent_name="developer",
-            success=True,
-            output=resp.content,
-            model=resp.model,
-            cost_usd=resp.cost_usd,
-            latency_ms=resp.latency_ms,
+        # ── Шаг 1: GPT-5.5 — исправляет баг ─────────────────────────────
+        logger.info("Pipeline fix шаг 1/2: GPT-5.5 исправляет баг")
+        dev_model = self._router.select_model(TaskType.FIX)
+        fix_msgs = PromptLibrary.fix(code, error=error, project=profile)
+        fix_resp = await client.chat(
+            [ChatMessage(**m) for m in fix_msgs],
+            model=dev_model,
+            temperature=0.1,
+            max_tokens=8192,
         )
+        total_cost += fix_resp.cost_usd
+        pipeline_steps.append(PipelineStep(
+            step=1,
+            agent_name="Разработчик",
+            model=fix_resp.model,
+            output=fix_resp.content,
+            cost_usd=fix_resp.cost_usd,
+            latency_ms=fix_resp.latency_ms,
+        ))
+
+        # ── Шаг 2: Gemini — проверяет исправление ────────────────────────
+        logger.info("Pipeline fix шаг 2/2: Gemini проверяет исправление")
+        rev_model = self._router.select_model(TaskType.REVIEW)
+        rev_msgs = PromptLibrary.pipeline_fix_reviewer(code, fix_resp.content, error, profile)
+        rev_resp = await client.chat(
+            [ChatMessage(**m) for m in rev_msgs],
+            model=rev_model,
+            temperature=0.1,
+            max_tokens=4096,
+        )
+        total_cost += rev_resp.cost_usd
+        pipeline_steps.append(PipelineStep(
+            step=2,
+            agent_name="Ревьюер",
+            model=rev_resp.model,
+            output=rev_resp.content,
+            cost_usd=rev_resp.cost_usd,
+            latency_ms=rev_resp.latency_ms,
+        ))
 
         elapsed = int((time.monotonic() - start) * 1000)
-        self._persist(TaskType.FIX, "fix code", result)
+        self._memory.save_task(
+            task_type=str(TaskType.FIX),
+            prompt="fix code",
+            model_used=f"{dev_model} → {rev_model}",
+            result_summary=rev_resp.content[:500],
+            cost_usd=total_cost,
+            project_path=str(self.root),
+            status="completed",
+        )
 
         return OrchestratorResult(
             task_type=TaskType.FIX,
             success=True,
-            primary_output=result.output,
-            agent_results=[result],
-            total_cost_usd=result.cost_usd,
+            primary_output=rev_resp.content,
+            pipeline_steps=pipeline_steps,
+            total_cost_usd=total_cost,
             total_latency_ms=elapsed,
-            model_used=result.model,
+            model_used=rev_resp.model,
             project_profile=profile,
         )
 
     async def run_refactor(self, paths: list[Path]) -> OrchestratorResult:
-        """Refactor code in provided paths."""
+        """
+        Пайплайн refactor: Claude (план рефакторинга) → GPT-5.5 (рефакторинг) → Gemini (ревью).
+        """
+        from gib.prompts import PromptLibrary
+        from gib.providers import ChatMessage, OpenRouterClient
+
         start = time.monotonic()
         profile = await self._analyze_project()
+        client = OpenRouterClient()
+        pipeline_steps: list[PipelineStep] = []
+        total_cost = 0.0
+
         code = self._collect_file_context(paths)
+        path_str = ", ".join(str(p) for p in paths)
 
         if not code:
             return OrchestratorResult(
@@ -221,33 +353,91 @@ class Orchestrator:
                 primary_output="Нет кода для рефакторинга. Укажите пути к файлам или директориям.",
             )
 
-        from gib.providers import ChatMessage, OpenRouterClient
-        from gib.prompts import PromptLibrary
-        client = OpenRouterClient()
-        model = self._router.select_model(TaskType.REFACTOR)
-        path_str = ", ".join(str(p) for p in paths)
-        msgs = PromptLibrary.refactor(code, path=path_str, project=profile)
-        resp = await client.chat([ChatMessage(**m) for m in msgs], model=model)
+        # ── Шаг 1: Claude — план рефакторинга ────────────────────────────
+        logger.info("Pipeline refactor шаг 1/3: Claude планирует рефакторинг")
+        arch_model = self._router.select_model(TaskType.ARCHITECTURE)
+        arch_msgs = PromptLibrary.pipeline_architect(
+            f"Рефакторинг файлов: {path_str}", code, profile
+        )
+        arch_resp = await client.chat(
+            [ChatMessage(**m) for m in arch_msgs],
+            model=arch_model,
+            temperature=0.3,
+            max_tokens=4096,
+        )
+        total_cost += arch_resp.cost_usd
+        pipeline_steps.append(PipelineStep(
+            step=1,
+            agent_name="Архитектор",
+            model=arch_resp.model,
+            output=arch_resp.content,
+            cost_usd=arch_resp.cost_usd,
+            latency_ms=arch_resp.latency_ms,
+        ))
+
+        # ── Шаг 2: GPT-5.5 — рефакторинг ─────────────────────────────────
+        logger.info("Pipeline refactor шаг 2/3: GPT-5.5 рефакторит код")
+        dev_model = self._router.select_model(TaskType.FIX)
+        ref_msgs = PromptLibrary.pipeline_developer(
+            f"Рефакторинг: {path_str}", arch_resp.content, code, profile
+        )
+        ref_resp = await client.chat(
+            [ChatMessage(**m) for m in ref_msgs],
+            model=dev_model,
+            temperature=0.2,
+            max_tokens=8192,
+        )
+        total_cost += ref_resp.cost_usd
+        pipeline_steps.append(PipelineStep(
+            step=2,
+            agent_name="Разработчик",
+            model=ref_resp.model,
+            output=ref_resp.content,
+            cost_usd=ref_resp.cost_usd,
+            latency_ms=ref_resp.latency_ms,
+        ))
+
+        # ── Шаг 3: Gemini — ревью рефакторинга ───────────────────────────
+        logger.info("Pipeline refactor шаг 3/3: Gemini проверяет рефакторинг")
+        rev_model = self._router.select_model(TaskType.REVIEW)
+        rev_msgs = PromptLibrary.pipeline_reviewer(
+            f"Рефакторинг: {path_str}", arch_resp.content, ref_resp.content, profile
+        )
+        rev_resp = await client.chat(
+            [ChatMessage(**m) for m in rev_msgs],
+            model=rev_model,
+            temperature=0.2,
+            max_tokens=8192,
+        )
+        total_cost += rev_resp.cost_usd
+        pipeline_steps.append(PipelineStep(
+            step=3,
+            agent_name="Ревьюер",
+            model=rev_resp.model,
+            output=rev_resp.content,
+            cost_usd=rev_resp.cost_usd,
+            latency_ms=rev_resp.latency_ms,
+        ))
 
         elapsed = int((time.monotonic() - start) * 1000)
-        result = AgentResult(
-            agent_name="developer",
-            success=True,
-            output=resp.content,
-            model=resp.model,
-            cost_usd=resp.cost_usd,
-            latency_ms=resp.latency_ms,
+        self._memory.save_task(
+            task_type=str(TaskType.REFACTOR),
+            prompt=f"refactor {path_str}",
+            model_used=f"{arch_model} → {dev_model} → {rev_model}",
+            result_summary=rev_resp.content[:500],
+            cost_usd=total_cost,
+            project_path=str(self.root),
+            status="completed",
         )
-        self._persist(TaskType.REFACTOR, f"refactor {path_str}", result)
 
         return OrchestratorResult(
             task_type=TaskType.REFACTOR,
             success=True,
-            primary_output=resp.content,
-            agent_results=[result],
-            total_cost_usd=resp.cost_usd,
+            primary_output=rev_resp.content,
+            pipeline_steps=pipeline_steps,
+            total_cost_usd=total_cost,
             total_latency_ms=elapsed,
-            model_used=resp.model,
+            model_used=rev_resp.model,
             project_profile=profile,
         )
 

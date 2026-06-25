@@ -198,3 +198,103 @@ class PromptLibrary:
 """},
             {"role": "user", "content": f"Проанализируй изменения в файле:\n\n```diff\n{diff}\n```"},
         ]
+
+    # ──────────────────────────────────────────────────────────
+    # Pipeline prompts — для передачи контекста между агентами
+    # ──────────────────────────────────────────────────────────
+
+    @staticmethod
+    def pipeline_architect(prompt: str, file_context: str = "", project: ProjectProfile | None = None) -> list[dict]:
+        """Шаг 1: Claude анализирует задачу и составляет план для разработчика."""
+        ctx = PromptLibrary._project_context(project)
+        file_section = f"\n## Существующий код\n```\n{file_context}\n```" if file_context else ""
+        return [
+            {"role": "system", "content": SYSTEM_BASE + ctx + """
+Ты — архитектор. Твоя задача: проанализировать задачу разработчика и составить чёткий план реализации.
+
+Выведи структурированный план:
+## Анализ задачи
+[что нужно сделать и почему]
+
+## Архитектурные решения
+[какие паттерны, структуры данных, подходы использовать]
+
+## Пошаговый план реализации
+[конкретные шаги для разработчика]
+
+## Что важно учесть
+[edge cases, безопасность, производительность]
+
+Будь конкретным — разработчик будет реализовывать строго по этому плану.
+"""},
+            {"role": "user", "content": f"Задача: {prompt}{file_section}"},
+        ]
+
+    @staticmethod
+    def pipeline_developer(prompt: str, architect_plan: str, file_context: str = "", project: ProjectProfile | None = None) -> list[dict]:
+        """Шаг 2: GPT-5.5 реализует код по плану архитектора."""
+        ctx = PromptLibrary._project_context(project)
+        file_section = f"\n## Существующий код\n```\n{file_context}\n```" if file_context else ""
+        return [
+            {"role": "system", "content": SYSTEM_BASE + ctx + """
+Ты — ведущий разработчик. Архитектор уже проанализировал задачу и дал тебе план.
+Твоя задача: реализовать код строго по плану архитектора.
+
+Требования:
+- Следуй плану архитектора точно
+- Пиши чистый, читаемый, production-ready код
+- Добавь обработку ошибок и типизацию
+- Выведи полный готовый к использованию код
+"""},
+            {"role": "user", "content": f"Оригинальная задача: {prompt}\n\n## План архитектора\n{architect_plan}{file_section}\n\nРеализуй код по этому плану."},
+        ]
+
+    @staticmethod
+    def pipeline_reviewer(prompt: str, architect_plan: str, developer_code: str, project: ProjectProfile | None = None) -> list[dict]:
+        """Шаг 3: Gemini ревьюит код с учётом плана архитектора."""
+        ctx = PromptLibrary._project_context(project)
+        return [
+            {"role": "system", "content": SYSTEM_BASE + ctx + """
+Ты — эксперт по код-ревью. У тебя есть: оригинальная задача, план архитектора и реализация разработчика.
+Твоя задача: проверить соответствие реализации плану и найти проблемы.
+
+Формат ответа:
+## Соответствие плану архитектора
+[выполнил ли разработчик все пункты плана]
+
+## Найденные проблемы
+[баги, уязвимости, нарушения плана — с конкретными строками кода]
+
+## Рекомендации
+[улучшения, оптимизации]
+
+## Итоговая оценка
+[✅ Готово к использованию / ⚠️ Требует правок / ❌ Серьёзные проблемы]
+
+## Финальный код
+[если нужны правки — выведи исправленную версию, иначе напиши "Код принят без изменений"]
+"""},
+            {"role": "user", "content": f"Задача: {prompt}\n\n## План архитектора\n{architect_plan}\n\n## Код разработчика\n```\n{developer_code}\n```\n\nПроведи ревью."},
+        ]
+
+    @staticmethod
+    def pipeline_fix_reviewer(original_code: str, fixed_code: str, error: str = "", project: ProjectProfile | None = None) -> list[dict]:
+        """Шаг 2 fix-пайплайна: Gemini проверяет исправление GPT-5.5."""
+        ctx = PromptLibrary._project_context(project)
+        error_section = f"\n\nИсходная ошибка:\n{error}" if error else ""
+        return [
+            {"role": "system", "content": SYSTEM_BASE + ctx + """
+Ты — эксперт по код-ревью. Разработчик исправил баг. Проверь исправление.
+
+Формат:
+## Исправление устранило проблему?
+[да/нет + объяснение]
+
+## Новые проблемы
+[появились ли новые баги или регрессии]
+
+## Финальный код
+[исправленная версия если нужно, или "Исправление принято"]
+"""},
+            {"role": "user", "content": f"Исходный код:\n```\n{original_code}\n```{error_section}\n\nИсправленный код от разработчика:\n```\n{fixed_code}\n```\n\nПроверь исправление."},
+        ]

@@ -1,4 +1,4 @@
 """Orchestrator module — coordinates multiple agents."""
-from .core import Orchestrator, OrchestratorResult
+from .core import Orchestrator, OrchestratorResult, PipelineStep
 
-__all__ = ["Orchestrator", "OrchestratorResult"]
+__all__ = ["Orchestrator", "OrchestratorResult", "PipelineStep"]
