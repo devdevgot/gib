@@ -43,11 +43,11 @@ def _build_merge_prompt(state: GibState) -> str:
     ]
 
     if arch:
-        parts.append(f"\n## Architecture Design (from Architect)\n{arch[:4000]}")
+        parts.append(f"\n## Architecture Design (from Architect)\n{arch[:8000]}")
     if code:
-        parts.append(f"\n## Implementation (from Developer)\n{code[:6000]}")
+        parts.append(f"\n## Implementation (from Developer)\n{code[:10000]}")
     if research:
-        parts.append(f"\n## Research Findings (from Researcher)\n{research[:2000]}")
+        parts.append(f"\n## Research Findings (from Researcher)\n{research[:4000]}")
 
     parts.append(
         "\n## Your Task"

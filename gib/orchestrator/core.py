@@ -185,6 +185,7 @@ class Orchestrator:
             workflow_type=workflow_type.value,
             target_paths=target_paths or [],
             error_input=error_input,
+            project_root=str(self.root),
         )
         initial["session_context"] = session_context
 
@@ -313,14 +314,11 @@ class Orchestrator:
         """gib test — использует Feature workflow с акцентом на тесты."""
         start = time.monotonic()
         path_strs = [str(p) for p in paths] if paths else []
-        # Запускаем feature workflow с модифицированным запросом
-        initial = make_initial_state(
-            user_request="Написать тесты для кода",
-            workflow_type=WorkflowType.FEATURE.value,
+        final_state, profile = await self._run_workflow(
+            WorkflowType.FEATURE,
+            "Написать тесты для кода",
             target_paths=path_strs,
         )
-        final_state = await WorkflowRegistry.run(WorkflowType.FEATURE, initial)
-        profile = await self._get_profile()
         elapsed = int((time.monotonic() - start) * 1000)
         self._persist(str(TaskType.TEST), "generate tests", final_state)
         return _state_to_result(final_state, str(TaskType.TEST), elapsed, profile)
@@ -329,13 +327,11 @@ class Orchestrator:
         """gib docs — Feature workflow с акцентом на документацию."""
         start = time.monotonic()
         path_strs = [str(p) for p in paths] if paths else []
-        initial = make_initial_state(
-            user_request="Написать документацию для кода",
-            workflow_type=WorkflowType.FEATURE.value,
+        final_state, profile = await self._run_workflow(
+            WorkflowType.FEATURE,
+            "Написать документацию для кода",
             target_paths=path_strs,
         )
-        final_state = await WorkflowRegistry.run(WorkflowType.FEATURE, initial)
-        profile = await self._get_profile()
         elapsed = int((time.monotonic() - start) * 1000)
         self._persist(str(TaskType.DOCS), "generate docs", final_state)
         return _state_to_result(final_state, str(TaskType.DOCS), elapsed, profile)

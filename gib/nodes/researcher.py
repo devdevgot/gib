@@ -30,8 +30,22 @@ Focus on what could go wrong and how to prevent it.
 def _build_researcher_prompt(state: GibState) -> str:
     ctx = state.get("project_context", {})
     stack = state.get("detected_stack", {})
-    deps = state.get("dependencies_raw", "")[:3000]
-    arch = state.get("architecture_result", "")[:2000]
+    deps = state.get("dependencies_raw", "")[:5000]
+    arch = state.get("architecture_result", "")[:4000]
+    relevant_files: list[str] = state.get("relevant_files", [])
+    file_contents: dict[str, str] = state.get("file_contents", {})
+
+    # Контекст исходного кода
+    file_context = ""
+    paths = relevant_files or list(file_contents.keys())[:15]
+    for path in paths:
+        content = file_contents.get(path, "")
+        if not content:
+            continue
+        preview = content[:8000]
+        if len(content) > 8000:
+            preview += f"\n\n... [truncated, {len(content)} total chars]"
+        file_context += f"\n### {path}\n```\n{preview}\n```\n"
 
     parts = [
         f"## Task to Research\n{state.get('user_request', '')}",
@@ -39,6 +53,7 @@ def _build_researcher_prompt(state: GibState) -> str:
         f"Frameworks: {', '.join(stack.get('frameworks', []))}",
         f"\n## Dependencies\n{deps}" if deps else "",
         f"\n## Proposed Architecture\n{arch}" if arch else "",
+        f"\n## Relevant Code{file_context}" if file_context else "",
         (
             "\n## Research Focus"
             "\n1. Are there breaking changes in recent versions of used libraries?"

@@ -10,10 +10,15 @@ from typing import Any
 
 from gib.core.state import GibState
 from gib.utils import get_logger
+from gib.utils.project_root import get_project_root
 
 logger = get_logger("gib.nodes.context_builder")
 
-# Файлы конфигурации, которые всегда читаем
+# Лимиты контекста для разных режимов
+_FAST_PER_FILE_MAX = 10_000
+_FAST_TOTAL_MAX = 120_000
+_FULL_PER_FILE_MAX = 15_000
+_CHUNK_SIZE = 30_000
 _CONFIG_FILES = [
     "README.md", "README.rst", "README.txt",
     "package.json", "requirements.txt", "pyproject.toml",
@@ -155,7 +160,7 @@ async def node_context_builder(state: GibState) -> dict:
     Для review workflow — собирает ВСЕ файлы проекта и раскладывает по батчам.
     Для остальных workflow — быстрый контекст (топ файлы).
     """
-    root = Path(state.get("project_context", {}).get("root", str(Path.cwd())))
+    root = get_project_root(state)
     target_paths = state.get("target_paths", [])
     workflow_type = state.get("workflow_type", "")
     logger.info("[context_builder] workflow=%s, target=%s", workflow_type, target_paths)
@@ -181,8 +186,8 @@ async def node_context_builder(state: GibState) -> dict:
 
     # Review workflow — собираем ВСЕ файлы, разбиваем на батчи
     if workflow_type in ("review", "doctor"):
-        file_contents = _find_all_files(root, target_paths, per_file_max=10000)
-        chunks = make_file_chunks(file_contents, chunk_size=20000)
+        file_contents = _find_all_files(root, target_paths, per_file_max=_FULL_PER_FILE_MAX)
+        chunks = make_file_chunks(file_contents, chunk_size=_CHUNK_SIZE)
         total_chars = sum(len(v) for v in file_contents.values())
         logger.info(
             "[context_builder] Полный скан: %d файлов, %d chars, %d батчей",
@@ -190,20 +195,19 @@ async def node_context_builder(state: GibState) -> dict:
         )
         metadata_update = {"review_chunks": chunks, "review_chunks_total": len(chunks)}
     else:
-        # Остальные workflow — быстрый контекст
-        file_contents = _find_all_files(root, target_paths, per_file_max=5000)
-        # Ограничиваем до 30k для скорости
+        # Остальные workflow — расширенный контекст
+        file_contents = _find_all_files(root, target_paths, per_file_max=_FAST_PER_FILE_MAX)
         trimmed: dict[str, str] = {}
         total = 0
         for k, v in file_contents.items():
-            if total + len(v) > 30000:
+            if total + len(v) > _FAST_TOTAL_MAX:
                 break
             trimmed[k] = v
             total += len(v)
         file_contents = trimmed
         metadata_update = {}
         logger.info(
-            "[context_builder] Быстрый контекст: %d файлов, %d chars",
+            "[context_builder] Расширенный контекст: %d файлов, %d chars",
             len(file_contents), sum(len(v) for v in file_contents.values()),
         )
 

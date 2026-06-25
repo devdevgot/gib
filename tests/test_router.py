@@ -28,6 +28,13 @@ def test_detect_task_type_general():
     assert router.detect_task_type("add a new feature") == TaskType.GENERAL
 
 
+def test_select_model_research():
+    router = ModelRouter()
+    model = router.select_model(TaskType.RESEARCH)
+    assert isinstance(model, str)
+    assert "gemini" in model.lower()
+
+
 def test_select_model_returns_string():
     router = ModelRouter()
     model = router.select_model(TaskType.REVIEW)

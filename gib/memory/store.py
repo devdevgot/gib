@@ -14,6 +14,7 @@ from sqlalchemy import (
     Text,
     create_engine,
     desc,
+    func,
     select,
 )
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
@@ -85,9 +86,9 @@ class MemoryStore:
         with Session(self._engine) as session:
             record = TaskRecord(
                 task_type=task_type,
-                prompt=prompt[:2000],
+                prompt=prompt[:8000],
                 model_used=model_used,
-                result_summary=result_summary[:4000],
+                result_summary=result_summary[:50_000],
                 cost_usd=str(cost_usd),
                 project_path=project_path,
                 status=status,
@@ -95,7 +96,20 @@ class MemoryStore:
             session.add(record)
             session.commit()
             session.refresh(record)
+            self._enforce_max_history(session)
             return record
+
+    def _enforce_max_history(self, session: Session) -> None:
+        """Удаляет старые записи сверх memory.max_history."""
+        max_history = get_config().memory.max_history
+        count = session.scalar(select(func.count()).select_from(TaskRecord)) or 0
+        if count <= max_history:
+            return
+        excess = count - max_history
+        stmt = select(TaskRecord).order_by(TaskRecord.created_at.asc()).limit(excess)
+        for record in session.scalars(stmt):
+            session.delete(record)
+        session.commit()
 
     def get_last_review(self, project_path: str = "") -> TaskRecord | None:
         """Возвращает последний review/doctor для проекта."""

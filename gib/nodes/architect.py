@@ -54,8 +54,8 @@ def _build_architect_prompt(state: GibState) -> str:
         content = file_contents.get(path, "")
         if not content:
             continue
-        preview = content[:6000]
-        if len(content) > 6000:
+        preview = content[:10000]
+        if len(content) > 10000:
             preview += f"\n\n... [truncated, {len(content)} total chars]"
         file_context += f"\n### {path}\n```\n{preview}\n```\n"
 

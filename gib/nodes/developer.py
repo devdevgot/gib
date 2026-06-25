@@ -70,9 +70,9 @@ def _build_developer_prompt(state: GibState) -> str:
         if not content:
             continue
         # До 8k символов на файл
-        preview = content[:8000]
-        if len(content) > 8000:
-            preview += f"\n\n... [truncated at 8000 chars, full file is {len(content)} chars]"
+        preview = content[:12000]
+        if len(content) > 12000:
+            preview += f"\n\n... [truncated at 12000 chars, full file is {len(content)} chars]"
         file_context += f"\n### {path}\n```\n{preview}\n```\n"
 
     # Если relevant_files пуст — fallback на все file_contents (старое поведение)

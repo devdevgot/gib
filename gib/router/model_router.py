@@ -55,7 +55,7 @@ _TASK_KEYWORDS: dict[TaskType, list[str]] = {
 _CORE_TO_LEGACY: dict[str, str] = {
     "architecture": TaskType.ARCHITECTURE,
     "development": TaskType.DEVELOPMENT,
-    "research": TaskType.REVIEW,         # Gemini — тот же что и review
+    "research": TaskType.RESEARCH,
     "review": TaskType.REVIEW,
     "security": TaskType.SECURITY,
     "testing": TaskType.TEST,

@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Annotated, Any
 from typing_extensions import TypedDict
 
@@ -40,6 +41,7 @@ class GibState(TypedDict, total=False):
     # ── Входные данные ──────────────────────────────────────────────────────
     user_request: str                          # Исходная задача пользователя
     workflow_type: str                         # WorkflowType enum value
+    project_root: str                          # Абсолютный путь к корню проекта
     target_paths: list[str]                    # Файлы/папки для обработки
     error_input: str                           # Текст ошибки (для bugfix)
     session_context: str                       # История предыдущих задач проекта
@@ -127,11 +129,14 @@ def make_initial_state(
     workflow_type: str,
     target_paths: list[str] | None = None,
     error_input: str = "",
+    project_root: str = "",
 ) -> GibState:
     """Создаёт начальное состояние с безопасными дефолтами."""
+    root = project_root or str(Path.cwd())
     return GibState(
         user_request=user_request,
         workflow_type=workflow_type,
+        project_root=root,
         target_paths=target_paths or [],
         error_input=error_input,
         session_context="",

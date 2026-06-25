@@ -38,14 +38,14 @@ class RoutingRule(BaseModel):
 
 
 class ModelsConfig(BaseModel):
-    default: str = "anthropic/claude-opus-4.8"
+    default: str = "anthropic/claude-sonnet-4"
     fast: str = "google/gemini-2.5-flash"
-    cheap: str = "deepseek/deepseek-v3.2"
+    cheap: str = "deepseek/deepseek-chat"
     large_context: str = "google/gemini-2.5-pro"
-    code: str = "openai/gpt-5.5"
+    code: str = "openai/gpt-4o"
     reviewer: str = "google/gemini-2.5-pro"
     docs: str = "google/gemini-2.5-pro"
-    tests: str = "openai/gpt-5.5"
+    tests: str = "openai/gpt-4o"
 
 
 class OpenRouterConfig(BaseModel):

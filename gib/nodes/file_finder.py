@@ -19,6 +19,7 @@ from pathlib import Path
 from gib.core.container import Container
 from gib.core.state import GibState
 from gib.utils import get_logger
+from gib.utils.project_root import get_project_root
 
 logger = get_logger("gib.nodes.file_finder")
 
@@ -39,7 +40,7 @@ You are a code navigator. Given a task and a list of files in a project, \
 select the most relevant files that will need to be READ or MODIFIED to complete the task.
 
 Rules:
-- Select at most 20 files
+- Select at most 30 files
 - Prefer specificity: pick the files most directly related to the task
 - Always include __init__.py files for modified packages
 - Always include config files if the task touches configuration
@@ -179,10 +180,10 @@ Select the most relevant files. Return ONLY a JSON array of paths."""
             pass
 
     logger.warning("[file_finder] LLM вернул неверный JSON, используем кандидатов")
-    return candidates[:20]
+    return candidates[:30]
 
 
-def _read_files(root: Path, rel_paths: list[str], max_bytes: int = 50_000) -> dict[str, str]:
+def _read_files(root: Path, rel_paths: list[str], max_bytes: int = 80_000) -> dict[str, str]:
     """Читает файлы, обрезает до max_bytes каждый."""
     result: dict[str, str] = {}
     for rel in rel_paths:
@@ -210,7 +211,7 @@ async def node_file_finder(state: GibState) -> dict:
     """
     task = state.get("user_request", "")
     ctx = state.get("project_context", {})
-    root = Path(ctx.get("root", str(Path.cwd())))
+    root = get_project_root(state)
 
     logger.info("[file_finder] Ищу релевантные файлы в %s", root)
 
@@ -242,7 +243,7 @@ async def node_file_finder(state: GibState) -> dict:
         for c in candidates:
             if c not in valid:
                 valid.append(c)
-        valid = valid[:20]
+        valid = valid[:30]
 
     # 4. Читаем файлы
     file_contents = _read_files(root, valid, max_bytes=60_000)

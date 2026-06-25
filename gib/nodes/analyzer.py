@@ -11,6 +11,7 @@ from typing import Any
 
 from gib.core.state import GibState
 from gib.utils import get_logger
+from gib.utils.project_root import get_project_root
 
 logger = get_logger("gib.nodes.analyzer")
 
@@ -144,7 +145,7 @@ async def node_project_analyzer(state: GibState) -> dict:
     
     Returns partial GibState update.
     """
-    root = Path.cwd()
+    root = get_project_root(state)
     logger.info("[analyzer] Анализирую проект: %s", root)
 
     # Определяем стек
