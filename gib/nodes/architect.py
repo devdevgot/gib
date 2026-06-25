@@ -27,7 +27,7 @@ Be concrete and specific. Provide:
 1. Architecture overview
 2. Component list with responsibilities
 3. Data models / interfaces
-4. Implementation sequence
+4. Implementation sequence (which files to modify and in what order)
 5. Potential risks and mitigations
 
 Do NOT write implementation code — only architectural decisions.
@@ -36,19 +36,39 @@ Do NOT write implementation code — only architectural decisions.
 
 def _build_architect_prompt(state: GibState) -> str:
     ctx = state.get("project_context", {})
-    files = state.get("file_contents", {})
+    relevant_files: list[str] = state.get("relevant_files", [])
+    file_contents: dict[str, str] = state.get("file_contents", {})
     plan = state.get("execution_plan", "")
 
-    # Компонуем контекст файлов
+    # Список релевантных файлов
+    if relevant_files:
+        files_list = "\n".join(f"  - {f}" for f in relevant_files)
+        relevant_section = f"\n## Relevant Files\n{files_list}"
+    else:
+        relevant_section = ""
+
+    # Контекст файлов — полный контент
     file_context = ""
-    for path, content in list(files.items())[:10]:
-        file_context += f"\n### {path}\n```\n{content[:2000]}\n```\n"
+    for path in relevant_files:
+        content = file_contents.get(path, "")
+        if not content:
+            continue
+        preview = content[:6000]
+        if len(content) > 6000:
+            preview += f"\n\n... [truncated, {len(content)} total chars]"
+        file_context += f"\n### {path}\n```\n{preview}\n```\n"
+
+    # Fallback на старое поведение если relevant_files пуст
+    if not file_context and file_contents:
+        for path, content in list(file_contents.items())[:10]:
+            file_context += f"\n### {path}\n```\n{content[:3000]}\n```\n"
 
     parts = [
         f"## Task\n{state.get('user_request', '')}",
         f"\n## Execution Plan\n{plan}" if plan else "",
         f"\n## Project Stack\nLanguage: {ctx.get('language', 'Unknown')}",
         f"Frameworks: {', '.join(ctx.get('frameworks', []))}",
+        relevant_section,
         f"\n## Relevant Code{file_context}" if file_context else "",
     ]
 

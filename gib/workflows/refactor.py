@@ -1,7 +1,7 @@
 """Refactor Workflow — рефакторинг кода.
 
 Граф:
-  analyzer → context_builder → architect (план рефакторинга)
+  analyzer → context_builder → file_finder → architect (план рефакторинга)
     → developer (применяет план)
     → reviewer → (needs_fix → developer | approved)
     → security → patch_builder → approval → git → END
@@ -13,6 +13,7 @@ from langgraph.graph import END, StateGraph
 from gib.core.state import GibState
 from gib.nodes.analyzer import node_project_analyzer
 from gib.nodes.context_builder import node_context_builder
+from gib.nodes.file_finder import node_file_finder
 from gib.nodes.architect import node_architect
 from gib.nodes.developer import node_developer
 from gib.nodes.reviewer import node_reviewer, route_after_review
@@ -26,8 +27,8 @@ from gib.workflows.base import BaseWorkflow
 class RefactorWorkflow(BaseWorkflow):
     """
     Refactor Workflow: architect создаёт план, developer применяет.
-    
-    architect → developer → reviewer → retry → security → patch → git
+
+    file_finder → architect → developer → reviewer → retry → security → patch → git
     """
 
     @classmethod
@@ -36,6 +37,7 @@ class RefactorWorkflow(BaseWorkflow):
 
         g.add_node("analyzer", node_project_analyzer)
         g.add_node("context_builder", node_context_builder)
+        g.add_node("file_finder", node_file_finder)
         g.add_node("architect", node_architect)
         g.add_node("developer", node_developer)
         g.add_node("reviewer", node_reviewer)
@@ -46,7 +48,8 @@ class RefactorWorkflow(BaseWorkflow):
 
         g.set_entry_point("analyzer")
         g.add_edge("analyzer", "context_builder")
-        g.add_edge("context_builder", "architect")
+        g.add_edge("context_builder", "file_finder")
+        g.add_edge("file_finder", "architect")
         g.add_edge("architect", "developer")
         g.add_edge("developer", "reviewer")
 

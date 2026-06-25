@@ -1,7 +1,7 @@
 """BugFix Workflow — быстрое исправление ошибок.
 
 Граф (упрощённый, без архитектора):
-  analyzer → context_builder
+  analyzer → context_builder → file_finder
     → developer (fix mode)
     → reviewer → (needs_fix → developer | approved)
     → security → patch_builder → approval
@@ -14,6 +14,7 @@ from langgraph.graph import END, StateGraph
 from gib.core.state import GibState
 from gib.nodes.analyzer import node_project_analyzer
 from gib.nodes.context_builder import node_context_builder
+from gib.nodes.file_finder import node_file_finder
 from gib.nodes.developer import node_developer
 from gib.nodes.reviewer import node_reviewer, route_after_review
 from gib.nodes.security import node_security
@@ -26,8 +27,8 @@ from gib.workflows.base import BaseWorkflow
 class BugFixWorkflow(BaseWorkflow):
     """
     BugFix Workflow: быстрое исправление — без архитектора и researcher.
-    
-    developer → reviewer → retry (макс 2) → security → patch → git
+
+    file_finder → developer → reviewer → retry (макс 2) → security → patch → git
     """
 
     @classmethod
@@ -36,6 +37,7 @@ class BugFixWorkflow(BaseWorkflow):
 
         g.add_node("analyzer", node_project_analyzer)
         g.add_node("context_builder", node_context_builder)
+        g.add_node("file_finder", node_file_finder)
         g.add_node("developer", node_developer)
         g.add_node("reviewer", node_reviewer)
         g.add_node("security", node_security)
@@ -45,7 +47,8 @@ class BugFixWorkflow(BaseWorkflow):
 
         g.set_entry_point("analyzer")
         g.add_edge("analyzer", "context_builder")
-        g.add_edge("context_builder", "developer")
+        g.add_edge("context_builder", "file_finder")
+        g.add_edge("file_finder", "developer")
         g.add_edge("developer", "reviewer")
 
         g.add_conditional_edges(

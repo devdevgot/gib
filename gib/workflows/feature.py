@@ -1,7 +1,7 @@
 """Feature Workflow — полный пайплайн для новых фич.
 
 Граф:
-  analyzer → context_builder → task_planner
+  analyzer → context_builder → file_finder → task_planner
     → [architect ‖ developer ‖ researcher]  (параллельно)
     → merge → reviewer
     → supervisor → (needs_fix → developer | approved)
@@ -18,6 +18,7 @@ from gib.core.state import GibState
 from gib.core.types import ReviewVerdict
 from gib.nodes.analyzer import node_project_analyzer
 from gib.nodes.context_builder import node_context_builder
+from gib.nodes.file_finder import node_file_finder
 from gib.nodes.task_planner import node_task_planner
 from gib.nodes.architect import node_architect
 from gib.nodes.developer import node_developer
@@ -47,8 +48,9 @@ def _parallel_agents_router(state: GibState):
 class FeatureWorkflow(BaseWorkflow):
     """
     Feature Workflow: полный пайплайн разработки новой функциональности.
-    
+
     Архитектура:
+    - file_finder: семантический поиск релевантных файлов
     - Параллельные агенты (architect + developer + researcher)
     - Автоматическое ревью с retry (макс 2 итерации)
     - Статический security scan
@@ -64,6 +66,7 @@ class FeatureWorkflow(BaseWorkflow):
         # ── Подготовительные узлы ────────────────────────────────────────────
         g.add_node("analyzer", node_project_analyzer)
         g.add_node("context_builder", node_context_builder)
+        g.add_node("file_finder", node_file_finder)
         g.add_node("task_planner", node_task_planner)
 
         # ── Параллельные агенты ──────────────────────────────────────────────
@@ -87,10 +90,14 @@ class FeatureWorkflow(BaseWorkflow):
         # ── Последовательные рёбра ───────────────────────────────────────────
         g.set_entry_point("analyzer")
         g.add_edge("analyzer", "context_builder")
-        g.add_edge("context_builder", "task_planner")
+        g.add_edge("context_builder", "file_finder")
+        g.add_edge("file_finder", "task_planner")
 
         # Fan-out на параллельные агенты
-        g.add_conditional_edges("task_planner", _parallel_agents_router, ["architect", "developer", "researcher"])
+        g.add_conditional_edges(
+            "task_planner", _parallel_agents_router,
+            ["architect", "developer", "researcher"],
+        )
 
         # Fan-in после параллельных агентов
         g.add_edge("architect", "merge")

@@ -1,4 +1,4 @@
-"""Node: Developer Agent — GPT пишет код по архитектурному плану.
+"""Node: Developer Agent — пишет код по архитектурному плану.
 
 Запускается параллельно с Architect и Researcher (после того как план готов).
 При повторной итерации учитывает замечания ревьюера.
@@ -22,15 +22,20 @@ Rules:
 - Write self-documenting code with clear variable names
 - Include docstrings for public functions
 - Never leave TODO comments — implement everything
-- If modifying existing code, show the complete modified file
+- When modifying a file, show the COMPLETE modified file (not just the diff)
+- Use EXACT file paths as listed in "Relevant Files" below — do not invent paths
 
-Format your response as:
-1. Brief explanation of your approach
-2. Complete code with file paths clearly labeled as:
-   ### filename.ext
-   ```language
-   <code>
-   ```
+Output format:
+1. Brief explanation of your approach (2-5 lines)
+2. Each file as a separate block:
+
+### path/to/file.py
+```python
+<complete file content>
+```
+
+CRITICAL: The path after ### must exactly match one of the paths in "Relevant Files",
+or be a new file path that makes sense for the project structure.
 """
 
 _RETRY_SUFFIX = """\
@@ -44,18 +49,40 @@ The reviewer rejected your previous implementation. Fix ALL issues listed above.
 
 def _build_developer_prompt(state: GibState) -> str:
     arch = state.get("architecture_result", "")
-    files = state.get("file_contents", {})
+    relevant_files: list[str] = state.get("relevant_files", [])
+    file_contents: dict[str, str] = state.get("file_contents", {})
     iteration = state.get("review_iteration", 1)
     review = state.get("review_result", "")
     comments = state.get("review_comments", [])
 
-    # Контекст файлов
+    # Список файлов которые можно редактировать
+    if relevant_files:
+        files_list = "\n".join(f"  - {f}" for f in relevant_files)
+        relevant_section = f"\n## Relevant Files (use EXACT paths in ### headers)\n{files_list}"
+    else:
+        relevant_section = ""
+
+    # Контекст файлов — полный контент
     file_context = ""
-    for path, content in list(files.items())[:15]:
-        file_context += f"\n### {path}\n```\n{content[:3000]}\n```\n"
+    for path in relevant_files:
+        content = file_contents.get(path, "")
+        if not content:
+            continue
+        # До 8k символов на файл
+        preview = content[:8000]
+        if len(content) > 8000:
+            preview += f"\n\n... [truncated at 8000 chars, full file is {len(content)} chars]"
+        file_context += f"\n### {path}\n```\n{preview}\n```\n"
+
+    # Если relevant_files пуст — fallback на все file_contents (старое поведение)
+    if not file_context and file_contents:
+        for path, content in list(file_contents.items())[:15]:
+            preview = content[:4000]
+            file_context += f"\n### {path}\n```\n{preview}\n```\n"
 
     parts = [
         f"## Task\n{state.get('user_request', '')}",
+        relevant_section,
         f"\n## Architecture Plan\n{arch}" if arch else "",
         f"\n## Existing Code{file_context}" if file_context else "",
     ]
