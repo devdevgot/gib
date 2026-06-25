@@ -46,6 +46,12 @@ routing:
     - task_type: "watch"
       model: "openai/gpt-5.5"
       reason: "Developer provides live code feedback"
+    - task_type: "development"
+      model: "openai/gpt-5.5"
+      reason: "Core development tasks handled by lead developer"
+    - task_type: "security"
+      model: "openai/gpt-5.5"
+      reason: "Security checks by lead developer"
 
     # ── Второе мнение (Gemini 2.5 Pro) ───────────────────────
     - task_type: "review"

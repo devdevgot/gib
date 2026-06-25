@@ -126,10 +126,12 @@ async def _llm_select_files(
     project_context: dict,
 ) -> list[str]:
     """LLM выбирает топ-20 релевантных файлов."""
+    from gib.config.loader import get_config
     container = Container.instance()
     client = container.openrouter_client()
 
     from gib.providers import ChatMessage
+    _model = get_config().models.cheap or "deepseek/deepseek-chat"
 
     all_files_str = "\n".join(all_files)
     candidates_str = "\n".join(candidates) if candidates else "(none found)"
@@ -155,7 +157,7 @@ Select the most relevant files. Return ONLY a JSON array of paths."""
             ChatMessage(role="system", content=_FINDER_SYSTEM),
             ChatMessage(role="user", content=prompt),
         ],
-        model="anthropic/claude-3.5-haiku",
+        model=_model,
         temperature=0.0,
         max_tokens=1024,
     )
