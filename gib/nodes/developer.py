@@ -53,6 +53,7 @@ def _build_developer_prompt(state: GibState) -> str:
     file_contents: dict[str, str] = state.get("file_contents", {})
     iteration = state.get("review_iteration", 1)
     review = state.get("review_result", "")
+    session_context = state.get("session_context", "")
     comments = state.get("review_comments", [])
 
     # Список файлов которые можно редактировать
@@ -82,6 +83,7 @@ def _build_developer_prompt(state: GibState) -> str:
 
     parts = [
         f"## Task\n{state.get('user_request', '')}",
+        f"\n{session_context}" if session_context else "",
         relevant_section,
         f"\n## Architecture Plan\n{arch}" if arch else "",
         f"\n## Existing Code{file_context}" if file_context else "",

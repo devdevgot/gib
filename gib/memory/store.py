@@ -97,6 +97,19 @@ class MemoryStore:
             session.refresh(record)
             return record
 
+    def get_last_review(self, project_path: str = "") -> TaskRecord | None:
+        """Возвращает последний review/doctor для проекта."""
+        with Session(self._engine) as session:
+            stmt = (
+                select(TaskRecord)
+                .where(TaskRecord.task_type.in_(["review", "doctor"]))
+                .order_by(desc(TaskRecord.created_at))
+                .limit(1)
+            )
+            if project_path:
+                stmt = stmt.where(TaskRecord.project_path == project_path)
+            return session.scalar(stmt)
+
     def recent_tasks(self, limit: int = 20, project_path: str = "") -> list[TaskRecord]:
         with Session(self._engine) as session:
             stmt = select(TaskRecord).order_by(desc(TaskRecord.created_at)).limit(limit)

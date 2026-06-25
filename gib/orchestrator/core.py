@@ -154,6 +154,21 @@ class Orchestrator:
             self._memory.save_project_profile(str(self.root), profile.model_dump())
         return self._profile
 
+    def _build_session_context(self) -> str:
+        """Строит текстовый контекст из истории задач проекта."""
+        tasks = self._memory.recent_tasks(limit=10, project_path=str(self.root))
+        if not tasks:
+            return ""
+
+        lines = ["## Session History (previous tasks in this project)"]
+        for t in reversed(tasks):  # хронологический порядок
+            ts = t.created_at.strftime("%Y-%m-%d %H:%M") if t.created_at else "?"
+            summary = (t.result_summary or "").strip()
+            if summary:
+                lines.append(f"\n### [{ts}] {t.task_type.upper()}: {t.prompt[:120]}")
+                lines.append(summary[:1500])
+        return "\n".join(lines)
+
     async def _run_workflow(
         self,
         workflow_type: WorkflowType,
@@ -163,6 +178,7 @@ class Orchestrator:
     ) -> tuple[GibState, ProjectProfile | None]:
         """Запускает workflow и возвращает финальное состояние."""
         profile = await self._get_profile()
+        session_context = self._build_session_context()
 
         initial = make_initial_state(
             user_request=user_request,
@@ -170,6 +186,7 @@ class Orchestrator:
             target_paths=target_paths or [],
             error_input=error_input,
         )
+        initial["session_context"] = session_context
 
         final_state = await WorkflowRegistry.run(workflow_type, initial)
         return final_state, profile
@@ -190,7 +207,7 @@ class Orchestrator:
                 final_state.get("final_output")
                 or final_state.get("review_result")
                 or ""
-            )[:500],
+            )[:3000],
             cost_usd=final_state.get("total_cost_usd", 0.0),
             project_path=str(self.root),
             status="completed" if final_state.get("success") else "failed",

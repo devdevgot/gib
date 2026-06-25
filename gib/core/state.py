@@ -42,6 +42,7 @@ class GibState(TypedDict, total=False):
     workflow_type: str                         # WorkflowType enum value
     target_paths: list[str]                    # Файлы/папки для обработки
     error_input: str                           # Текст ошибки (для bugfix)
+    session_context: str                       # История предыдущих задач проекта
 
     # ── Анализ проекта (ProjectAnalyzer) ────────────────────────────────────
     project_context: dict[str, Any]            # Язык, фреймворк, пакетный менеджер
@@ -133,6 +134,7 @@ def make_initial_state(
         workflow_type=workflow_type,
         target_paths=target_paths or [],
         error_input=error_input,
+        session_context="",
         project_context={},
         repository_context={},
         detected_stack={},

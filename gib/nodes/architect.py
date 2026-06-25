@@ -39,6 +39,7 @@ def _build_architect_prompt(state: GibState) -> str:
     relevant_files: list[str] = state.get("relevant_files", [])
     file_contents: dict[str, str] = state.get("file_contents", {})
     plan = state.get("execution_plan", "")
+    session_context = state.get("session_context", "")
 
     # Список релевантных файлов
     if relevant_files:
@@ -65,6 +66,7 @@ def _build_architect_prompt(state: GibState) -> str:
 
     parts = [
         f"## Task\n{state.get('user_request', '')}",
+        f"\n{session_context}" if session_context else "",
         f"\n## Execution Plan\n{plan}" if plan else "",
         f"\n## Project Stack\nLanguage: {ctx.get('language', 'Unknown')}",
         f"Frameworks: {', '.join(ctx.get('frameworks', []))}",
