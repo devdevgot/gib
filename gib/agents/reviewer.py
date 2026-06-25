@@ -41,5 +41,5 @@ class ReviewerAgent(BaseAgent):
             return AgentResult(
                 agent_name=self.name,
                 success=False,
-                output=f"Review failed: {e}",
+                output=f"Ревью завершилось с ошибкой: {e}",
             )

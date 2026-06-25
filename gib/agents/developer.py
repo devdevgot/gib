@@ -43,5 +43,5 @@ class DeveloperAgent(BaseAgent):
             return AgentResult(
                 agent_name=self.name,
                 success=False,
-                output=f"Developer agent failed: {e}",
+                output=f"Агент разработчика завершился с ошибкой: {e}",
             )

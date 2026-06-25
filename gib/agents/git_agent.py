@@ -34,7 +34,7 @@ class GitAgent(BaseAgent):
                 return AgentResult(
                     agent_name=self.name,
                     success=False,
-                    output="No changes to commit (empty diff)",
+                    output="Нет изменений для коммита (diff пустой)",
                 )
             model = self._router.select_model(TaskType.COMMIT)
             messages = PromptLibrary.commit_message(diff[:8000])
@@ -53,7 +53,7 @@ class GitAgent(BaseAgent):
                 return AgentResult(
                     agent_name=self.name,
                     success=False,
-                    output=f"Commit message generation failed: {e}",
+                    output=f"Генерация сообщения коммита завершилась с ошибкой: {e}",
                 )
 
         elif operation == "do_commit":
@@ -61,13 +61,13 @@ class GitAgent(BaseAgent):
                 return AgentResult(
                     agent_name=self.name,
                     success=False,
-                    output="No commit message provided",
+                    output="Сообщение коммита не указано",
                 )
             success = git.commit(commit_message)
             return AgentResult(
                 agent_name=self.name,
                 success=success,
-                output=f"Committed: {commit_message}" if success else "Commit failed",
+                output=f"Закоммичено: {commit_message}" if success else "Коммит не удался",
             )
 
         elif operation == "status":
@@ -82,11 +82,11 @@ class GitAgent(BaseAgent):
             return AgentResult(
                 agent_name=self.name,
                 success=True,
-                output=diff or "No changes",
+                output=diff or "Нет изменений",
             )
 
         return AgentResult(
             agent_name=self.name,
             success=False,
-            output=f"Unknown git operation: {operation}",
+            output=f"Неизвестная git-операция: {operation}",
         )

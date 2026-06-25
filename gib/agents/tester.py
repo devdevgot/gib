@@ -42,5 +42,5 @@ class TesterAgent(BaseAgent):
             return AgentResult(
                 agent_name=self.name,
                 success=False,
-                output=f"Test generation failed: {e}",
+                output=f"Генерация тестов завершилась с ошибкой: {e}",
             )

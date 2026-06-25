@@ -141,7 +141,7 @@ class Orchestrator:
             return OrchestratorResult(
                 task_type=TaskType.REVIEW,
                 success=False,
-                primary_output="No code to review. Provide files or run from a project directory.",
+                primary_output="Нет кода для ревью. Укажите файлы или запустите из директории проекта.",
             )
 
         agent = ReviewerAgent()
@@ -175,16 +175,11 @@ class Orchestrator:
             return OrchestratorResult(
                 task_type=TaskType.FIX,
                 success=False,
-                primary_output="No code to fix. Provide file paths.",
+                primary_output="Нет кода для исправления. Укажите пути к файлам.",
             )
 
-        messages = [
-            {"role": "system", "content": f"""You are GIB — an expert developer.
-Fix the bugs in the provided code. Show the complete fixed file(s).
-Project: {profile.language} / {profile.framework}
-"""},
-            {"role": "user", "content": f"Fix this code:\n\n```\n{code}\n```" + (f"\n\nError:\n{error}" if error else "")},
-        ]
+        from gib.prompts import PromptLibrary
+        messages = PromptLibrary.fix(code, error=error, project=profile)
 
         from gib.providers import ChatMessage, OpenRouterClient
         client = OpenRouterClient()
@@ -223,7 +218,7 @@ Project: {profile.language} / {profile.framework}
             return OrchestratorResult(
                 task_type=TaskType.REFACTOR,
                 success=False,
-                primary_output="No code to refactor. Provide file or directory paths.",
+                primary_output="Нет кода для рефакторинга. Укажите пути к файлам или директориям.",
             )
 
         from gib.providers import ChatMessage, OpenRouterClient
@@ -270,7 +265,7 @@ Project: {profile.language} / {profile.framework}
             return OrchestratorResult(
                 task_type=TaskType.TEST,
                 success=False,
-                primary_output="No code to test. Provide file paths.",
+                primary_output="Нет кода для тестирования. Укажите пути к файлам.",
             )
 
         # Detect test framework
@@ -317,7 +312,7 @@ Project: {profile.language} / {profile.framework}
             return OrchestratorResult(
                 task_type=TaskType.DOCS,
                 success=False,
-                primary_output="No code to document.",
+                primary_output="Нет кода для документирования.",
             )
 
         agent = DocumenterAgent()
@@ -366,7 +361,7 @@ Project: {profile.language} / {profile.framework}
         from gib.prompts import PromptLibrary
         client = OpenRouterClient()
         model = self._router.select_model(TaskType.DOCTOR)
-        msgs = PromptLibrary.doctor(code or "No source code found", profile)
+        msgs = PromptLibrary.doctor(code or "Исходный код не найден", profile)
         resp = await client.chat([ChatMessage(**m) for m in msgs], model=model, max_tokens=8192)
 
         result = AgentResult(
@@ -409,7 +404,7 @@ Project: {profile.language} / {profile.framework}
             return OrchestratorResult(
                 task_type=TaskType.EXPLAIN,
                 success=False,
-                primary_output=f"Path not found: {path}",
+                primary_output=f"Путь не найден: {path}",
             )
 
         from gib.providers import ChatMessage, OpenRouterClient

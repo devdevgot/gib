@@ -44,5 +44,5 @@ class ArchitectAgent(BaseAgent):
             return AgentResult(
                 agent_name=self.name,
                 success=False,
-                output=f"Architect agent failed: {e}",
+                output=f"Агент архитектора завершился с ошибкой: {e}",
             )

@@ -42,5 +42,5 @@ class DocumenterAgent(BaseAgent):
             return AgentResult(
                 agent_name=self.name,
                 success=False,
-                output=f"Documentation failed: {e}",
+                output=f"Генерация документации завершилась с ошибкой: {e}",
             )
