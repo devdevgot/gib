@@ -60,6 +60,34 @@ class OrchestratorResult:
         return len(self.pipeline_steps) > 1
 
 
+def _build_pipeline_steps(final_state: dict) -> list[PipelineStep]:
+    """Собирает список PipelineStep из финального состояния LangGraph."""
+    models_used: list[str] = final_state.get("models_used", [])
+    steps: list[PipelineStep] = []
+
+    # Имена агентов по порядку появления в пайплайне
+    agent_names = {
+        0: "Архитектор",
+        1: "Разработчик",
+        2: "Ревьюер",
+    }
+    # fix pipeline: только developer + reviewer (2 модели)
+    if len(models_used) <= 2:
+        agent_names = {0: "Разработчик", 1: "Ревьюер"}
+
+    for i, model in enumerate(models_used):
+        steps.append(PipelineStep(
+            step=i + 1,
+            agent_name=agent_names.get(i % len(agent_names), f"Агент {i + 1}"),
+            model=model,
+            output="",  # детальный output не хранится в финальном state
+            cost_usd=0.0,
+            latency_ms=0,
+        ))
+
+    return steps
+
+
 class Orchestrator:
     """
     Central coordinator that:
@@ -108,102 +136,60 @@ class Orchestrator:
 
     async def run_general(self, prompt: str) -> OrchestratorResult:
         """
-        Пайплайн: Claude (архитектор) → GPT-5.5 (разработчик) → Gemini (ревьюер).
+        LangGraph пайплайн: Claude → GPT-5.5 → Gemini (с авто-retry если ревью не пройдено).
         """
-        from gib.prompts import PromptLibrary
-        from gib.providers import ChatMessage, OpenRouterClient
+        from gib.pipeline import get_general_graph
 
         start = time.monotonic()
         profile = await self._analyze_project()
-        client = OpenRouterClient()
-        pipeline_steps: list[PipelineStep] = []
-        total_cost = 0.0
-
         file_context = self._collect_source_context(max_chars=15000)
 
-        # ── Шаг 1: Claude — анализ и план ────────────────────────────────
-        logger.info("Pipeline шаг 1/3: Claude (архитектор) анализирует задачу")
-        arch_model = self._router.select_model(TaskType.ARCHITECTURE)
-        arch_msgs = PromptLibrary.pipeline_architect(prompt, file_context, profile)
-        arch_resp = await client.chat(
-            [ChatMessage(**m) for m in arch_msgs],
-            model=arch_model,
-            temperature=0.3,
-            max_tokens=4096,
-        )
-        total_cost += arch_resp.cost_usd
-        pipeline_steps.append(PipelineStep(
-            step=1,
-            agent_name="Архитектор",
-            model=arch_resp.model,
-            output=arch_resp.content,
-            cost_usd=arch_resp.cost_usd,
-            latency_ms=arch_resp.latency_ms,
-        ))
+        initial_state = {
+            "prompt": prompt,
+            "file_context": file_context,
+            "error_context": "",
+            "project_meta": profile.model_dump() if profile else {},
+            "architect_plan": "",
+            "developer_code": "",
+            "review_result": "",
+            "review_verdict": "",
+            "iteration": 1,
+            "max_iterations": 2,
+            "total_cost_usd": 0.0,
+            "total_latency_ms": 0,
+            "models_used": [],
+            "final_output": "",
+            "success": False,
+        }
 
-        # ── Шаг 2: GPT-5.5 — реализация по плану ─────────────────────────
-        logger.info("Pipeline шаг 2/3: GPT-5.5 (разработчик) реализует код")
-        dev_model = self._router.select_model(TaskType.FIX)  # GPT-5.5
-        dev_msgs = PromptLibrary.pipeline_developer(
-            prompt, arch_resp.content, file_context, profile
-        )
-        dev_resp = await client.chat(
-            [ChatMessage(**m) for m in dev_msgs],
-            model=dev_model,
-            temperature=0.2,
-            max_tokens=8192,
-        )
-        total_cost += dev_resp.cost_usd
-        pipeline_steps.append(PipelineStep(
-            step=2,
-            agent_name="Разработчик",
-            model=dev_resp.model,
-            output=dev_resp.content,
-            cost_usd=dev_resp.cost_usd,
-            latency_ms=dev_resp.latency_ms,
-        ))
-
-        # ── Шаг 3: Gemini — ревью кода ────────────────────────────────────
-        logger.info("Pipeline шаг 3/3: Gemini (ревьюер) проверяет код")
-        rev_model = self._router.select_model(TaskType.REVIEW)  # Gemini 2.5 Pro
-        rev_msgs = PromptLibrary.pipeline_reviewer(
-            prompt, arch_resp.content, dev_resp.content, profile
-        )
-        rev_resp = await client.chat(
-            [ChatMessage(**m) for m in rev_msgs],
-            model=rev_model,
-            temperature=0.2,
-            max_tokens=8192,
-        )
-        total_cost += rev_resp.cost_usd
-        pipeline_steps.append(PipelineStep(
-            step=3,
-            agent_name="Ревьюер",
-            model=rev_resp.model,
-            output=rev_resp.content,
-            cost_usd=rev_resp.cost_usd,
-            latency_ms=rev_resp.latency_ms,
-        ))
+        graph = get_general_graph()
+        final_state = await graph.ainvoke(initial_state)
 
         elapsed = int((time.monotonic() - start) * 1000)
+        models_used = final_state.get("models_used", [])
+        total_cost = final_state.get("total_cost_usd", 0.0)
+
         self._memory.save_task(
             task_type=str(TaskType.GENERAL),
             prompt=prompt,
-            model_used=f"{arch_model} → {dev_model} → {rev_model}",
-            result_summary=rev_resp.content[:500],
+            model_used=" → ".join(models_used),
+            result_summary=final_state.get("final_output", "")[:500],
             cost_usd=total_cost,
             project_path=str(self.root),
-            status="completed",
+            status="completed" if final_state.get("success") else "failed",
         )
+
+        # Собираем pipeline_steps из финального состояния для UI
+        steps = _build_pipeline_steps(final_state)
 
         return OrchestratorResult(
             task_type=str(TaskType.GENERAL),
-            success=True,
-            primary_output=rev_resp.content,
-            pipeline_steps=pipeline_steps,
+            success=final_state.get("success", False),
+            primary_output=final_state.get("final_output", ""),
+            pipeline_steps=steps,
             total_cost_usd=total_cost,
             total_latency_ms=elapsed,
-            model_used=rev_resp.model,
+            model_used=models_used[-1] if models_used else "",
             project_profile=profile,
         )
 
@@ -245,16 +231,12 @@ class Orchestrator:
 
     async def run_fix(self, paths: list[Path] | None = None, error: str = "") -> OrchestratorResult:
         """
-        Пайплайн fix: GPT-5.5 (исправляет баг) → Gemini (проверяет исправление).
+        LangGraph fix пайплайн: GPT-5.5 → Gemini (с авто-retry если ревью не пройдено).
         """
-        from gib.prompts import PromptLibrary
-        from gib.providers import ChatMessage, OpenRouterClient
+        from gib.pipeline import get_fix_graph
 
         start = time.monotonic()
         profile = await self._analyze_project()
-        client = OpenRouterClient()
-        pipeline_steps: list[PipelineStep] = []
-        total_cost = 0.0
 
         if paths:
             code = self._collect_file_context(paths)
@@ -268,80 +250,62 @@ class Orchestrator:
                 primary_output="Нет кода для исправления. Укажите пути к файлам.",
             )
 
-        # ── Шаг 1: GPT-5.5 — исправляет баг ─────────────────────────────
-        logger.info("Pipeline fix шаг 1/2: GPT-5.5 исправляет баг")
-        dev_model = self._router.select_model(TaskType.FIX)
-        fix_msgs = PromptLibrary.fix(code, error=error, project=profile)
-        fix_resp = await client.chat(
-            [ChatMessage(**m) for m in fix_msgs],
-            model=dev_model,
-            temperature=0.1,
-            max_tokens=8192,
-        )
-        total_cost += fix_resp.cost_usd
-        pipeline_steps.append(PipelineStep(
-            step=1,
-            agent_name="Разработчик",
-            model=fix_resp.model,
-            output=fix_resp.content,
-            cost_usd=fix_resp.cost_usd,
-            latency_ms=fix_resp.latency_ms,
-        ))
+        initial_state = {
+            "prompt": "Исправить баги в коде",
+            "file_context": code,
+            "error_context": error,
+            "project_meta": profile.model_dump() if profile else {},
+            "architect_plan": "",
+            "developer_code": "",
+            "review_result": "",
+            "review_verdict": "",
+            "iteration": 1,
+            "max_iterations": 2,
+            "total_cost_usd": 0.0,
+            "total_latency_ms": 0,
+            "models_used": [],
+            "final_output": "",
+            "success": False,
+        }
 
-        # ── Шаг 2: Gemini — проверяет исправление ────────────────────────
-        logger.info("Pipeline fix шаг 2/2: Gemini проверяет исправление")
-        rev_model = self._router.select_model(TaskType.REVIEW)
-        rev_msgs = PromptLibrary.pipeline_fix_reviewer(code, fix_resp.content, error, profile)
-        rev_resp = await client.chat(
-            [ChatMessage(**m) for m in rev_msgs],
-            model=rev_model,
-            temperature=0.1,
-            max_tokens=4096,
-        )
-        total_cost += rev_resp.cost_usd
-        pipeline_steps.append(PipelineStep(
-            step=2,
-            agent_name="Ревьюер",
-            model=rev_resp.model,
-            output=rev_resp.content,
-            cost_usd=rev_resp.cost_usd,
-            latency_ms=rev_resp.latency_ms,
-        ))
+        graph = get_fix_graph()
+        final_state = await graph.ainvoke(initial_state)
 
         elapsed = int((time.monotonic() - start) * 1000)
+        models_used = final_state.get("models_used", [])
+        total_cost = final_state.get("total_cost_usd", 0.0)
+
         self._memory.save_task(
             task_type=str(TaskType.FIX),
             prompt="fix code",
-            model_used=f"{dev_model} → {rev_model}",
-            result_summary=rev_resp.content[:500],
+            model_used=" → ".join(models_used),
+            result_summary=final_state.get("final_output", "")[:500],
             cost_usd=total_cost,
             project_path=str(self.root),
-            status="completed",
+            status="completed" if final_state.get("success") else "failed",
         )
+
+        steps = _build_pipeline_steps(final_state)
 
         return OrchestratorResult(
             task_type=TaskType.FIX,
-            success=True,
-            primary_output=rev_resp.content,
-            pipeline_steps=pipeline_steps,
+            success=final_state.get("success", False),
+            primary_output=final_state.get("final_output", ""),
+            pipeline_steps=steps,
             total_cost_usd=total_cost,
             total_latency_ms=elapsed,
-            model_used=rev_resp.model,
+            model_used=models_used[-1] if models_used else "",
             project_profile=profile,
         )
 
     async def run_refactor(self, paths: list[Path]) -> OrchestratorResult:
         """
-        Пайплайн refactor: Claude (план рефакторинга) → GPT-5.5 (рефакторинг) → Gemini (ревью).
+        LangGraph refactor пайплайн: Claude → GPT-5.5 → Gemini (с авто-retry если ревью не пройдено).
         """
-        from gib.prompts import PromptLibrary
-        from gib.providers import ChatMessage, OpenRouterClient
+        from gib.pipeline import get_general_graph
 
         start = time.monotonic()
         profile = await self._analyze_project()
-        client = OpenRouterClient()
-        pipeline_steps: list[PipelineStep] = []
-        total_cost = 0.0
 
         code = self._collect_file_context(paths)
         path_str = ", ".join(str(p) for p in paths)
@@ -353,91 +317,51 @@ class Orchestrator:
                 primary_output="Нет кода для рефакторинга. Укажите пути к файлам или директориям.",
             )
 
-        # ── Шаг 1: Claude — план рефакторинга ────────────────────────────
-        logger.info("Pipeline refactor шаг 1/3: Claude планирует рефакторинг")
-        arch_model = self._router.select_model(TaskType.ARCHITECTURE)
-        arch_msgs = PromptLibrary.pipeline_architect(
-            f"Рефакторинг файлов: {path_str}", code, profile
-        )
-        arch_resp = await client.chat(
-            [ChatMessage(**m) for m in arch_msgs],
-            model=arch_model,
-            temperature=0.3,
-            max_tokens=4096,
-        )
-        total_cost += arch_resp.cost_usd
-        pipeline_steps.append(PipelineStep(
-            step=1,
-            agent_name="Архитектор",
-            model=arch_resp.model,
-            output=arch_resp.content,
-            cost_usd=arch_resp.cost_usd,
-            latency_ms=arch_resp.latency_ms,
-        ))
+        initial_state = {
+            "prompt": f"Рефакторинг файлов: {path_str}",
+            "file_context": code,
+            "error_context": "",
+            "project_meta": profile.model_dump() if profile else {},
+            "architect_plan": "",
+            "developer_code": "",
+            "review_result": "",
+            "review_verdict": "",
+            "iteration": 1,
+            "max_iterations": 2,
+            "total_cost_usd": 0.0,
+            "total_latency_ms": 0,
+            "models_used": [],
+            "final_output": "",
+            "success": False,
+        }
 
-        # ── Шаг 2: GPT-5.5 — рефакторинг ─────────────────────────────────
-        logger.info("Pipeline refactor шаг 2/3: GPT-5.5 рефакторит код")
-        dev_model = self._router.select_model(TaskType.FIX)
-        ref_msgs = PromptLibrary.pipeline_developer(
-            f"Рефакторинг: {path_str}", arch_resp.content, code, profile
-        )
-        ref_resp = await client.chat(
-            [ChatMessage(**m) for m in ref_msgs],
-            model=dev_model,
-            temperature=0.2,
-            max_tokens=8192,
-        )
-        total_cost += ref_resp.cost_usd
-        pipeline_steps.append(PipelineStep(
-            step=2,
-            agent_name="Разработчик",
-            model=ref_resp.model,
-            output=ref_resp.content,
-            cost_usd=ref_resp.cost_usd,
-            latency_ms=ref_resp.latency_ms,
-        ))
-
-        # ── Шаг 3: Gemini — ревью рефакторинга ───────────────────────────
-        logger.info("Pipeline refactor шаг 3/3: Gemini проверяет рефакторинг")
-        rev_model = self._router.select_model(TaskType.REVIEW)
-        rev_msgs = PromptLibrary.pipeline_reviewer(
-            f"Рефакторинг: {path_str}", arch_resp.content, ref_resp.content, profile
-        )
-        rev_resp = await client.chat(
-            [ChatMessage(**m) for m in rev_msgs],
-            model=rev_model,
-            temperature=0.2,
-            max_tokens=8192,
-        )
-        total_cost += rev_resp.cost_usd
-        pipeline_steps.append(PipelineStep(
-            step=3,
-            agent_name="Ревьюер",
-            model=rev_resp.model,
-            output=rev_resp.content,
-            cost_usd=rev_resp.cost_usd,
-            latency_ms=rev_resp.latency_ms,
-        ))
+        graph = get_general_graph()
+        final_state = await graph.ainvoke(initial_state)
 
         elapsed = int((time.monotonic() - start) * 1000)
+        models_used = final_state.get("models_used", [])
+        total_cost = final_state.get("total_cost_usd", 0.0)
+
         self._memory.save_task(
             task_type=str(TaskType.REFACTOR),
             prompt=f"refactor {path_str}",
-            model_used=f"{arch_model} → {dev_model} → {rev_model}",
-            result_summary=rev_resp.content[:500],
+            model_used=" → ".join(models_used),
+            result_summary=final_state.get("final_output", "")[:500],
             cost_usd=total_cost,
             project_path=str(self.root),
-            status="completed",
+            status="completed" if final_state.get("success") else "failed",
         )
+
+        steps = _build_pipeline_steps(final_state)
 
         return OrchestratorResult(
             task_type=TaskType.REFACTOR,
-            success=True,
-            primary_output=rev_resp.content,
-            pipeline_steps=pipeline_steps,
+            success=final_state.get("success", False),
+            primary_output=final_state.get("final_output", ""),
+            pipeline_steps=steps,
             total_cost_usd=total_cost,
             total_latency_ms=elapsed,
-            model_used=rev_resp.model,
+            model_used=models_used[-1] if models_used else "",
             project_profile=profile,
         )
 
