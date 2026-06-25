@@ -35,9 +35,15 @@ def _get_orchestrator():
     return Orchestrator(root=Path.cwd())
 
 
+def _read_masked(prompt_text: str) -> str:
+    """Read input showing * for each character typed."""
+    from prompt_toolkit import prompt as pt_prompt
+    from prompt_toolkit.formatted_text import FormattedText
+    return pt_prompt(FormattedText([("", prompt_text)]), is_password=True)
+
+
 def _setup_api_key() -> str:
     """Interactively ask for the API key and save it to ~/.gib/.env."""
-    import getpass
     from gib.utils.console import console
 
     gib_dir = Path.home() / ".gib"
@@ -51,7 +57,7 @@ def _setup_api_key() -> str:
 
     while True:
         try:
-            key = getpass.getpass("  OpenRouter API key (sk-or-...): ").strip()
+            key = _read_masked("  OpenRouter API key (sk-or-...): ").strip()
         except (KeyboardInterrupt, EOFError):
             console.print("\n[dim]Отмена.[/]")
             raise typer.Exit(0)
@@ -393,7 +399,6 @@ def cmd_chat() -> None:
 @app.command("set-key")
 def cmd_set_key() -> None:
     """Update your OpenRouter API key."""
-    import getpass
     import os
 
     gib_dir = Path.home() / ".gib"
@@ -410,7 +415,7 @@ def cmd_set_key() -> None:
 
     while True:
         try:
-            key = getpass.getpass("  Новый OpenRouter API key (sk-or-...): ").strip()
+            key = _read_masked("  Новый OpenRouter API key (sk-or-...): ").strip()
         except (KeyboardInterrupt, EOFError):
             console.print("\n[dim]Отмена.[/]")
             raise typer.Exit(0)
