@@ -35,17 +35,60 @@ def _get_orchestrator():
     return Orchestrator(root=Path.cwd())
 
 
+def _setup_api_key() -> str:
+    """Interactively ask for the API key and save it to ~/.gib/.env."""
+    import getpass
+    from gib.utils.console import console
+
+    gib_dir = Path.home() / ".gib"
+    gib_dir.mkdir(parents=True, exist_ok=True)
+    env_file = gib_dir / ".env"
+
+    console.print()
+    console.print("[bold cyan]GIB[/] — первый запуск, нужен API ключ OpenRouter")
+    console.print("[dim]Получить ключ:[/] [cyan]https://openrouter.ai/keys[/]")
+    console.print()
+
+    while True:
+        try:
+            key = getpass.getpass("  OpenRouter API key (sk-or-...): ").strip()
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[dim]Отмена.[/]")
+            raise typer.Exit(0)
+
+        if key.startswith("sk-or-") and len(key) > 20:
+            break
+        console.print("[red]  ✗ Неверный формат. Ключ должен начинаться с sk-or-[/]")
+
+    # Сохраняем
+    with open(env_file, "a") as f:
+        f.write(f"\nOPENROUTER_API_KEY={key}\n")
+
+    import os
+    os.environ["OPENROUTER_API_KEY"] = key
+
+    console.print(f"[green]  ✓ Ключ сохранён в {env_file}[/]")
+    console.print()
+    return key
+
+
 def _ensure_api_key() -> None:
-    from gib.config import get_config
-    try:
-        get_config().api_key
-    except ValueError as e:
-        console.print(f"[error]✗ {e}[/]")
-        console.print(
-            "[dim]Set your key:[/] [cyan]export OPENROUTER_API_KEY=sk-or-...[/]\n"
-            "[dim]Or add to ~/.gib/.env[/]"
-        )
-        raise typer.Exit(2)
+    """Load ~/.gib/.env then check key; if missing — run interactive setup."""
+    import os
+    from dotenv import load_dotenv
+
+    # Загружаем глобальный ~/.gib/.env
+    global_env = Path.home() / ".gib" / ".env"
+    if global_env.exists():
+        load_dotenv(global_env, override=False)
+
+    key = os.environ.get("OPENROUTER_API_KEY", "").strip()
+    if not key:
+        _setup_api_key()
+        return
+
+    # Ключ есть — убедимся что get_config() его видит (кэш мог создаться раньше)
+    os.environ["OPENROUTER_API_KEY"] = key
 
 
 def _print_help() -> None:
