@@ -22,7 +22,7 @@ app = typer.Typer(
 # Known subcommands — used by the entrypoint wrapper to route correctly
 _SUBCOMMANDS = {
     "review", "fix", "refactor", "commit", "doctor",
-    "explain", "test", "docs", "watch", "chat", "resume",
+    "explain", "test", "docs", "watch", "chat", "resume", "free",
 }
 
 
@@ -471,6 +471,33 @@ def cmd_resume(
     async def _run_it():
         with ui.spinner("[cyan]Возобновляю задачу с последнего checkpoint..."):
             result = await orch.run_resume(thread_id)
+        ui.print_project_info(result)
+        ui.print_result(result)
+
+    _run(_run_it())
+
+
+# ─────────────────────────────────────────────────────────────
+# gib free — бесплатный режим (free tier models)
+# ─────────────────────────────────────────────────────────────
+
+@app.command("free")
+def cmd_free(
+    prompt: Annotated[str, typer.Argument(help="Задача для выполнения")],
+) -> None:
+    """Выполнить задачу на бесплатных моделях (без затрат).
+
+    Pipeline: Nemotron Ultra → North Mini Code → Laguna M.1 → North Mini Code → Laguna M.1
+    """
+    _ensure_api_key()
+    from gib.cli import ui
+
+    async def _run_it():
+        orch = _get_orchestrator()
+        with ui.spinner(
+            "[cyan]Nemotron[/] планирует → [cyan]NorthMini[/] пишет → [cyan]Laguna[/] ревьюит... [dim](free)[/]"
+        ):
+            result = await orch.run_free(prompt)
         ui.print_project_info(result)
         ui.print_result(result)
 

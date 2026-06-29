@@ -31,6 +31,7 @@ class WorkflowType(str, Enum):
     REFACTOR = "refactor"
     EXPLAIN = "explain"
     DOCTOR = "doctor"
+    FREE = "free"
 
 
 class AgentRole(str, Enum):
