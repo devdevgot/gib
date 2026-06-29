@@ -46,7 +46,13 @@ class BaseWorkflow(ABC):
         """
         thread_id = thread_id or str(uuid.uuid4())
         config = {"configurable": {"thread_id": thread_id}}
-        resolved_root = project_root or get_project_root(initial_state)
+        from gib.utils.project_dirs import resolve_project_root
+
+        resolved_root = (
+            resolve_project_root(project_root)
+            if project_root is not None
+            else get_project_root(initial_state)
+        )
 
         async with AsyncSqliteSaver.from_conn_string(
             checkpoint_conn_string(resolved_root)

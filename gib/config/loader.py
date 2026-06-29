@@ -29,6 +29,39 @@ def _ensure_global_config() -> None:
         global_cfg.parent.mkdir(parents=True, exist_ok=True)
         import shutil
         shutil.copy(_BUNDLED_CONFIG, global_cfg)
+    _migrate_global_config_paths(global_cfg)
+
+
+def _migrate_global_config_paths(global_cfg: Path) -> None:
+    """Rewrite legacy global ~/.gib/*.db paths to per-project defaults."""
+    if not global_cfg.exists():
+        return
+
+    from gib.utils.project_dirs import is_legacy_global_db_path
+
+    raw = _load_yaml(global_cfg)
+    memory = raw.get("memory") or {}
+    logging_cfg = raw.get("logging") or {}
+    changed = False
+
+    if is_legacy_global_db_path(str(memory.get("db_path", "")), "memory.db"):
+        memory["db_path"] = ".gib/memory.db"
+        changed = True
+    if is_legacy_global_db_path(str(memory.get("checkpoint_db_path", "")), "checkpoints.db"):
+        memory["checkpoint_db_path"] = ".gib/checkpoints.db"
+        changed = True
+    if str(logging_cfg.get("log_dir", "")) in (".gib/logs", "~/.gib/logs"):
+        if logging_cfg.get("log_dir") == "~/.gib/logs":
+            logging_cfg["log_dir"] = ".gib/logs"
+            changed = True
+
+    if not changed:
+        return
+
+    raw["memory"] = memory
+    raw["logging"] = logging_cfg
+    with open(global_cfg, "w", encoding="utf-8") as f:
+        yaml.safe_dump(raw, f, allow_unicode=True, sort_keys=False)
 
 
 class RoutingRule(BaseModel):
@@ -122,26 +155,32 @@ class Config(BaseModel):
         return self.models.default
 
     def memory_db_path(self, project_root: Path | str | None = None) -> Path:
-        from gib.utils.project_dirs import memory_db_path as resolve_memory_db_path
+        from gib.utils.project_dirs import (
+            is_legacy_global_db_path,
+            memory_db_path as resolve_memory_db_path,
+        )
 
-        if self.memory.db_path in (".gib/memory.db", "~/.gib/memory.db"):
+        if is_legacy_global_db_path(self.memory.db_path, "memory.db"):
             return resolve_memory_db_path(project_root)
         path = Path(self.memory.db_path).expanduser()
         if not path.is_absolute():
             path = resolve_project_root(project_root) / path
         path.parent.mkdir(parents=True, exist_ok=True)
-        return path
+        return path.resolve()
 
     def checkpoint_db_path(self, project_root: Path | str | None = None) -> Path:
-        from gib.utils.project_dirs import checkpoint_db_path as resolve_checkpoint_db_path
+        from gib.utils.project_dirs import (
+            checkpoint_db_path as resolve_checkpoint_db_path,
+            is_legacy_global_db_path,
+        )
 
-        if self.memory.checkpoint_db_path in (".gib/checkpoints.db", "~/.gib/checkpoints.db"):
+        if is_legacy_global_db_path(self.memory.checkpoint_db_path, "checkpoints.db"):
             return resolve_checkpoint_db_path(project_root)
         path = Path(self.memory.checkpoint_db_path).expanduser()
         if not path.is_absolute():
             path = resolve_project_root(project_root) / path
         path.parent.mkdir(parents=True, exist_ok=True)
-        return path
+        return path.resolve()
 
     def log_dir_path(self, project_root: Path | str | None = None) -> Path:
         from gib.utils.project_dirs import log_dir_path as resolve_log_dir_path

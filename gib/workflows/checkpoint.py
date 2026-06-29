@@ -3,10 +3,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gib.utils.project_dirs import checkpoint_db_path, ensure_project_data_layout
+from gib.config import get_config
+from gib.utils.project_dirs import aiosqlite_conn_string, ensure_project_data_layout
 
 
 def checkpoint_conn_string(project_root: Path | str | None = None) -> str:
-    """Filesystem path for LangGraph AsyncSqliteSaver (aiosqlite file path, not SQLAlchemy URI)."""
+    """Filesystem path for LangGraph AsyncSqliteSaver (not a SQLAlchemy URI)."""
     ensure_project_data_layout(project_root)
-    return str(checkpoint_db_path(project_root).resolve())
+    db_path = get_config().checkpoint_db_path(project_root)
+    return aiosqlite_conn_string(db_path)
