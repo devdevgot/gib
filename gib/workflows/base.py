@@ -6,12 +6,10 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-
 from gib.core.state import GibState
 from gib.providers.errors import CreditsExhaustedError
 from gib.utils.project_root import get_project_root
-from gib.workflows.checkpoint import checkpoint_conn_string
+from gib.workflows.checkpoint import open_checkpoint_saver
 
 
 class BaseWorkflow(ABC):
@@ -54,9 +52,7 @@ class BaseWorkflow(ABC):
             else get_project_root(initial_state)
         )
 
-        async with AsyncSqliteSaver.from_conn_string(
-            checkpoint_conn_string(resolved_root)
-        ) as checkpointer:
+        async with open_checkpoint_saver(resolved_root) as checkpointer:
             graph = cls.build_graph().compile(checkpointer=checkpointer)
             try:
                 if resume:

@@ -17,11 +17,16 @@ from sqlalchemy import (
     func,
     select,
 )
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from gib.config import get_config
 from gib.utils import get_logger
-from gib.utils.project_dirs import ensure_project_data_layout, sqlalchemy_sqlite_url
+from gib.utils.project_dirs import (
+    ensure_project_data_layout,
+    memory_db_path as resolve_memory_db_path,
+    sqlalchemy_sqlite_url,
+)
 
 logger = get_logger("gib.memory")
 
@@ -95,14 +100,33 @@ class MemoryStore:
         db_path: Path | None = None,
         project_root: Path | str | None = None,
     ) -> None:
+        self._engine = None
         if db_path is None:
             ensure_project_data_layout(project_root)
             path = get_config().memory_db_path(project_root)
         else:
             path = Path(db_path).expanduser().resolve()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        self._engine = create_engine(sqlalchemy_sqlite_url(path), echo=False)
-        Base.metadata.create_all(self._engine)
+
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            self._engine = create_engine(sqlalchemy_sqlite_url(path), echo=False)
+            Base.metadata.create_all(self._engine)
+        except (OSError, SQLAlchemyError):
+            if db_path is not None:
+                raise
+
+            fallback_path = resolve_memory_db_path(project_root).resolve()
+            if fallback_path == path.resolve():
+                raise
+
+            logger.warning(
+                "Falling back to per-project memory DB after failing to open %s",
+                path,
+            )
+            fallback_path.parent.mkdir(parents=True, exist_ok=True)
+            self._engine = create_engine(sqlalchemy_sqlite_url(fallback_path), echo=False)
+            Base.metadata.create_all(self._engine)
+
         self._session_factory = sessionmaker(bind=self._engine)
 
     # ── Task history ──────────────────────────────────────────────────────────

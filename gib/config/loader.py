@@ -64,6 +64,27 @@ def _migrate_global_config_paths(global_cfg: Path) -> None:
         yaml.safe_dump(raw, f, allow_unicode=True, sort_keys=False)
 
 
+def _resolve_storage_path(
+    path_str: str,
+    *,
+    project_root: Path | str | None,
+    fallback_path: Path,
+) -> Path:
+    """Resolve a configured storage path, falling back to per-project storage when invalid."""
+    path = Path(path_str).expanduser()
+    if not path.is_absolute():
+        path = resolve_project_root(project_root) / path
+
+    try:
+        if path.exists() and path.is_dir():
+            raise IsADirectoryError(f"SQLite path points to a directory: {path}")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return path.resolve()
+    except OSError:
+        fallback_path.parent.mkdir(parents=True, exist_ok=True)
+        return fallback_path.resolve()
+
+
 class RoutingRule(BaseModel):
     task_type: str
     model: str
@@ -161,12 +182,12 @@ class Config(BaseModel):
         )
 
         if is_legacy_global_db_path(self.memory.db_path, "memory.db"):
-            return resolve_memory_db_path(project_root)
-        path = Path(self.memory.db_path).expanduser()
-        if not path.is_absolute():
-            path = resolve_project_root(project_root) / path
-        path.parent.mkdir(parents=True, exist_ok=True)
-        return path.resolve()
+            return resolve_memory_db_path(project_root).resolve()
+        return _resolve_storage_path(
+            self.memory.db_path,
+            project_root=project_root,
+            fallback_path=resolve_memory_db_path(project_root).resolve(),
+        )
 
     def checkpoint_db_path(self, project_root: Path | str | None = None) -> Path:
         from gib.utils.project_dirs import (
@@ -175,12 +196,12 @@ class Config(BaseModel):
         )
 
         if is_legacy_global_db_path(self.memory.checkpoint_db_path, "checkpoints.db"):
-            return resolve_checkpoint_db_path(project_root)
-        path = Path(self.memory.checkpoint_db_path).expanduser()
-        if not path.is_absolute():
-            path = resolve_project_root(project_root) / path
-        path.parent.mkdir(parents=True, exist_ok=True)
-        return path.resolve()
+            return resolve_checkpoint_db_path(project_root).resolve()
+        return _resolve_storage_path(
+            self.memory.checkpoint_db_path,
+            project_root=project_root,
+            fallback_path=resolve_checkpoint_db_path(project_root).resolve(),
+        )
 
     def log_dir_path(self, project_root: Path | str | None = None) -> Path:
         from gib.utils.project_dirs import log_dir_path as resolve_log_dir_path

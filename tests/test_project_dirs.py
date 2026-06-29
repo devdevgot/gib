@@ -132,6 +132,36 @@ def test_memory_store_with_legacy_global_config(tmp_path, monkeypatch):
     loader._CONFIG_SEARCH_PATHS = orig_paths
 
 
+def test_memory_store_falls_back_from_invalid_config_path(tmp_path, monkeypatch):
+    import gib.config.loader as loader
+    from gib.memory.store import MemoryStore
+
+    gib_dir = tmp_path / ".gib"
+    gib_dir.mkdir()
+    broken_parent = tmp_path / "broken-parent"
+    broken_parent.write_text("not-a-directory", encoding="utf-8")
+    broken_db = broken_parent / "memory.db"
+    (gib_dir / "config.yaml").write_text(
+        f"memory:\n  db_path: {broken_db}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("gib.utils.project_dirs.Path.home", lambda: tmp_path)
+    loader.get_config.cache_clear()
+    orig_paths = loader._CONFIG_SEARCH_PATHS
+    loader._CONFIG_SEARCH_PATHS = [gib_dir / "config.yaml"]
+
+    project = tmp_path / "repo"
+    project.mkdir()
+
+    store = MemoryStore(project_root=project)
+    db_file = (project / ".gib" / "memory.db").resolve()
+    assert db_file.exists()
+    assert store._engine.url.database == str(db_file)
+
+    loader.get_config.cache_clear()
+    loader._CONFIG_SEARCH_PATHS = orig_paths
+
+
 def test_checkpoint_conn_string_opens_with_async_sqlite_saver(tmp_path):
     import asyncio
 
@@ -150,6 +180,35 @@ def test_checkpoint_conn_string_opens_with_async_sqlite_saver(tmp_path):
 
     assert asyncio.run(_open()) is True
     assert (project / ".gib" / "checkpoints.db").exists()
+
+
+def test_checkpoint_conn_string_falls_back_from_invalid_config_path(tmp_path, monkeypatch):
+    import gib.config.loader as loader
+
+    from gib.workflows.checkpoint import checkpoint_conn_string
+
+    gib_dir = tmp_path / ".gib"
+    gib_dir.mkdir()
+    broken_parent = tmp_path / "broken-parent"
+    broken_parent.write_text("not-a-directory", encoding="utf-8")
+    broken_db = broken_parent / "checkpoints.db"
+    (gib_dir / "config.yaml").write_text(
+        f"memory:\n  checkpoint_db_path: {broken_db}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("gib.utils.project_dirs.Path.home", lambda: tmp_path)
+    loader.get_config.cache_clear()
+    orig_paths = loader._CONFIG_SEARCH_PATHS
+    loader._CONFIG_SEARCH_PATHS = [gib_dir / "config.yaml"]
+
+    project = tmp_path / "repo"
+    project.mkdir()
+
+    conn = checkpoint_conn_string(project)
+    assert conn == str((project / ".gib" / "checkpoints.db").resolve())
+
+    loader.get_config.cache_clear()
+    loader._CONFIG_SEARCH_PATHS = orig_paths
 
 
 def test_ensure_gitignore_creates_file(tmp_path):
