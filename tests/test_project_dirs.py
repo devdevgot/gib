@@ -1,10 +1,12 @@
 """Tests for per-project .gib data directories."""
+import sqlite3
 from pathlib import Path
 
 from gib.utils.project_dirs import (
     checkpoint_db_path,
     cleanup_legacy_global_databases,
     ensure_gitignore,
+    find_writable_db_path,
     log_dir_path,
     memory_db_path,
     project_data_dir,
@@ -75,8 +77,140 @@ def test_checkpoint_conn_string_uses_project_path(tmp_path):
     project.mkdir()
 
     conn = checkpoint_conn_string(project)
-    expected = project / ".gib" / "checkpoints.db"
-    assert conn == f"sqlite:///{expected}"
+    expected = (project / ".gib" / "checkpoints.db").resolve()
+    assert conn == str(expected)
+    assert (project / ".gib").is_dir()
+
+
+def test_checkpoint_conn_string_with_legacy_global_config(tmp_path, monkeypatch):
+    import gib.config.loader as loader
+    from gib.workflows.checkpoint import checkpoint_conn_string
+
+    gib_dir = tmp_path / ".gib"
+    gib_dir.mkdir()
+    (gib_dir / "config.yaml").write_text(
+        "memory:\n  checkpoint_db_path: ~/.gib/checkpoints.db\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("gib.utils.project_dirs.Path.home", lambda: tmp_path)
+    loader.get_config.cache_clear()
+    orig_paths = loader._CONFIG_SEARCH_PATHS
+    loader._CONFIG_SEARCH_PATHS = [gib_dir / "config.yaml"]
+
+    project = tmp_path / "repo"
+    project.mkdir()
+
+    conn = checkpoint_conn_string(project)
+    assert conn == str((project / ".gib" / "checkpoints.db").resolve())
+
+    loader.get_config.cache_clear()
+    loader._CONFIG_SEARCH_PATHS = orig_paths
+
+
+def test_memory_store_with_legacy_global_config(tmp_path, monkeypatch):
+    import gib.config.loader as loader
+    from gib.memory.store import MemoryStore
+
+    gib_dir = tmp_path / ".gib"
+    gib_dir.mkdir()
+    (gib_dir / "config.yaml").write_text(
+        "memory:\n  db_path: ~/.gib/memory.db\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("gib.utils.project_dirs.Path.home", lambda: tmp_path)
+    loader.get_config.cache_clear()
+    orig_paths = loader._CONFIG_SEARCH_PATHS
+    loader._CONFIG_SEARCH_PATHS = [gib_dir / "config.yaml"]
+
+    project = tmp_path / "repo"
+    project.mkdir()
+
+    store = MemoryStore(project_root=project)
+    db_file = project / ".gib" / "memory.db"
+    assert db_file.exists()
+    assert str(db_file.resolve()) in store._engine.url.database
+
+    loader.get_config.cache_clear()
+    loader._CONFIG_SEARCH_PATHS = orig_paths
+
+
+def test_memory_store_falls_back_from_invalid_config_path(tmp_path, monkeypatch):
+    import gib.config.loader as loader
+    from gib.memory.store import MemoryStore
+
+    gib_dir = tmp_path / ".gib"
+    gib_dir.mkdir()
+    broken_parent = tmp_path / "broken-parent"
+    broken_parent.write_text("not-a-directory", encoding="utf-8")
+    broken_db = broken_parent / "memory.db"
+    (gib_dir / "config.yaml").write_text(
+        f"memory:\n  db_path: {broken_db}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("gib.utils.project_dirs.Path.home", lambda: tmp_path)
+    loader.get_config.cache_clear()
+    orig_paths = loader._CONFIG_SEARCH_PATHS
+    loader._CONFIG_SEARCH_PATHS = [gib_dir / "config.yaml"]
+
+    project = tmp_path / "repo"
+    project.mkdir()
+
+    store = MemoryStore(project_root=project)
+    db_file = (project / ".gib" / "memory.db").resolve()
+    assert db_file.exists()
+    assert store._engine.url.database == str(db_file)
+
+    loader.get_config.cache_clear()
+    loader._CONFIG_SEARCH_PATHS = orig_paths
+
+
+def test_checkpoint_conn_string_opens_with_async_sqlite_saver(tmp_path):
+    import asyncio
+
+    from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+
+    from gib.workflows.checkpoint import checkpoint_conn_string
+
+    project = tmp_path / "repo"
+    project.mkdir()
+
+    async def _open():
+        async with AsyncSqliteSaver.from_conn_string(
+            checkpoint_conn_string(project)
+        ) as checkpointer:
+            return checkpointer is not None
+
+    assert asyncio.run(_open()) is True
+    assert (project / ".gib" / "checkpoints.db").exists()
+
+
+def test_checkpoint_conn_string_falls_back_from_invalid_config_path(tmp_path, monkeypatch):
+    import gib.config.loader as loader
+
+    from gib.workflows.checkpoint import checkpoint_conn_string
+
+    gib_dir = tmp_path / ".gib"
+    gib_dir.mkdir()
+    broken_parent = tmp_path / "broken-parent"
+    broken_parent.write_text("not-a-directory", encoding="utf-8")
+    broken_db = broken_parent / "checkpoints.db"
+    (gib_dir / "config.yaml").write_text(
+        f"memory:\n  checkpoint_db_path: {broken_db}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("gib.utils.project_dirs.Path.home", lambda: tmp_path)
+    loader.get_config.cache_clear()
+    orig_paths = loader._CONFIG_SEARCH_PATHS
+    loader._CONFIG_SEARCH_PATHS = [gib_dir / "config.yaml"]
+
+    project = tmp_path / "repo"
+    project.mkdir()
+
+    conn = checkpoint_conn_string(project)
+    assert conn == str((project / ".gib" / "checkpoints.db").resolve())
+
+    loader.get_config.cache_clear()
+    loader._CONFIG_SEARCH_PATHS = orig_paths
 
 
 def test_ensure_gitignore_creates_file(tmp_path):
@@ -109,6 +243,9 @@ def test_ensure_gitignore_appends_to_existing(tmp_path):
 
 
 def test_cleanup_legacy_global_databases(tmp_path, monkeypatch):
+    import gib.utils.project_dirs as pd
+
+    pd._legacy_cleanup_done = False
     gib_dir = tmp_path / ".gib"
     gib_dir.mkdir()
     memory = gib_dir / "memory.db"
@@ -123,6 +260,7 @@ def test_cleanup_legacy_global_databases(tmp_path, monkeypatch):
     assert checkpoints in removed
     assert not memory.exists()
     assert not checkpoints.exists()
+    assert cleanup_legacy_global_databases() == []
 
 
 def test_memory_store_adds_gitignore(tmp_path):
@@ -133,3 +271,45 @@ def test_memory_store_adds_gitignore(tmp_path):
 
     MemoryStore(project_root=project)
     assert (project / ".gitignore").read_text(encoding="utf-8").count(".gib/") >= 1
+
+
+def test_find_writable_db_path_returns_preferred_when_usable(tmp_path):
+    project = tmp_path / "repo"
+    project.mkdir()
+    preferred = project / ".gib" / "memory.db"
+
+    result = find_writable_db_path(preferred, "memory.db", project)
+    assert result == preferred.expanduser()
+    assert sqlite3.connect(str(result)) is not None
+
+
+def test_find_writable_db_path_falls_back_when_preferred_blocked(tmp_path, monkeypatch):
+    project = tmp_path / "repo"
+    project.mkdir()
+
+    blocked_parent = tmp_path / "blocked"
+    blocked_parent.write_text("not-a-dir", encoding="utf-8")
+    preferred = blocked_parent / "memory.db"
+
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr("gib.utils.project_dirs.Path.home", lambda: home)
+
+    result = find_writable_db_path(preferred, "memory.db", project)
+    assert result != preferred
+    assert sqlite3.connect(str(result)) is not None
+    conn = sqlite3.connect(str(result))
+    conn.execute("PRAGMA user_version;")
+    conn.close()
+
+
+def test_find_writable_db_path_rejects_directory_path(tmp_path):
+    project = tmp_path / "repo"
+    project.mkdir()
+    preferred = project / ".gib" / "memory.db"
+    preferred.parent.mkdir(parents=True, exist_ok=True)
+    preferred.mkdir()  # preferred is a directory — must be skipped
+
+    result = find_writable_db_path(preferred, "memory.db", project)
+    assert result != preferred
+    assert not result.is_dir()
