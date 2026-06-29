@@ -75,8 +75,29 @@ def test_checkpoint_conn_string_uses_project_path(tmp_path):
     project.mkdir()
 
     conn = checkpoint_conn_string(project)
-    expected = project / ".gib" / "checkpoints.db"
-    assert conn == f"sqlite:///{expected}"
+    expected = (project / ".gib" / "checkpoints.db").resolve()
+    assert conn == str(expected)
+    assert (project / ".gib").is_dir()
+
+
+def test_checkpoint_conn_string_opens_with_async_sqlite_saver(tmp_path):
+    import asyncio
+
+    from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+
+    from gib.workflows.checkpoint import checkpoint_conn_string
+
+    project = tmp_path / "repo"
+    project.mkdir()
+
+    async def _open():
+        async with AsyncSqliteSaver.from_conn_string(
+            checkpoint_conn_string(project)
+        ) as checkpointer:
+            return checkpointer is not None
+
+    assert asyncio.run(_open()) is True
+    assert (project / ".gib" / "checkpoints.db").exists()
 
 
 def test_ensure_gitignore_creates_file(tmp_path):
