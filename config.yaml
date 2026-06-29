@@ -6,13 +6,13 @@ openrouter:
 
 models:
   default: "anthropic/claude-opus-4.8"        # Главный архитектор
-  code: "openai/gpt-5.5"                       # Главный разработчик
+  code: "z-ai/glm-5.2"                         # Главный разработчик
   reviewer: "google/gemini-2.5-pro"            # Ревьюер / второе мнение
   fast: "google/gemini-2.5-flash"
   cheap: "deepseek/deepseek-v3.2"
   large_context: "google/gemini-2.5-pro"
   docs: "google/gemini-2.5-pro"
-  tests: "openai/gpt-5.5"
+  tests: "z-ai/glm-5.2"
 
 routing:
   rules:
@@ -33,24 +33,24 @@ routing:
       model: "anthropic/claude-opus-4.8"
       reason: "Interactive sessions with the architect"
 
-    # ── Разработчик (GPT-5.5) ─────────────────────────────────
+    # ── Разработчик (GLM 5.2) ─────────────────────────────────
     - task_type: "fix"
-      model: "openai/gpt-5.5"
+      model: "z-ai/glm-5.2"
       reason: "Lead developer handles bug fixing"
     - task_type: "test"
-      model: "openai/gpt-5.5"
+      model: "z-ai/glm-5.2"
       reason: "Lead developer writes tests"
     - task_type: "commit"
-      model: "openai/gpt-5.5"
+      model: "z-ai/glm-5.2"
       reason: "Developer generates commit messages"
     - task_type: "watch"
-      model: "openai/gpt-5.5"
+      model: "z-ai/glm-5.2"
       reason: "Developer provides live code feedback"
     - task_type: "development"
-      model: "openai/gpt-5.5"
+      model: "z-ai/glm-5.2"
       reason: "Core development tasks handled by lead developer"
     - task_type: "security"
-      model: "openai/gpt-5.5"
+      model: "z-ai/glm-5.2"
       reason: "Security checks by lead developer"
 
     # ── Исследователь (Gemini 2.5 Pro) ─────────────────────────

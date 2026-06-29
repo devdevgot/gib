@@ -232,7 +232,7 @@ class PromptLibrary:
 
     @staticmethod
     def pipeline_developer(prompt: str, architect_plan: str, file_context: str = "", project: ProjectProfile | None = None) -> list[dict]:
-        """Шаг 2: GPT-5.5 реализует код по плану архитектора."""
+        """Шаг 2: GLM 5.2 реализует код по плану архитектора."""
         ctx = PromptLibrary._project_context(project)
         file_section = f"\n## Существующий код\n```\n{file_context}\n```" if file_context else ""
         return [
@@ -279,7 +279,7 @@ class PromptLibrary:
 
     @staticmethod
     def pipeline_fix_reviewer(original_code: str, fixed_code: str, error: str = "", project: ProjectProfile | None = None) -> list[dict]:
-        """Шаг 2 fix-пайплайна: Gemini проверяет исправление GPT-5.5."""
+        """Шаг 2 fix-пайплайна: Gemini проверяет исправление GLM 5.2."""
         ctx = PromptLibrary._project_context(project)
         error_section = f"\n\nИсходная ошибка:\n{error}" if error else ""
         return [

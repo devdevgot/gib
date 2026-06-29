@@ -42,10 +42,10 @@ class ModelsConfig(BaseModel):
     fast: str = "google/gemini-2.5-flash"
     cheap: str = "deepseek/deepseek-v3.2"
     large_context: str = "google/gemini-2.5-pro"
-    code: str = "openai/gpt-5.5"
+    code: str = "z-ai/glm-5.2"
     reviewer: str = "google/gemini-2.5-pro"
     docs: str = "google/gemini-2.5-pro"
-    tests: str = "openai/gpt-5.5"
+    tests: str = "z-ai/glm-5.2"
 
 
 class OpenRouterConfig(BaseModel):

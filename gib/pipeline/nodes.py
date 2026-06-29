@@ -71,14 +71,14 @@ async def node_architect(state: PipelineState) -> dict:
 
 
 # ──────────────────────────────────────────────────────────────
-# Узел 2: Разработчик (GPT-5.5)
+# Узел 2: Разработчик (GLM 5.2)
 # ──────────────────────────────────────────────────────────────
 
 async def node_developer(state: PipelineState) -> dict:
-    """GPT-5.5 пишет код по плану архитектора."""
-    logger.info("[pipeline] Шаг: разработчик (GPT-5.5), итерация %d", state.get("iteration", 1))
+    """GLM 5.2 пишет код по плану архитектора."""
+    logger.info("[pipeline] Шаг: разработчик (GLM 5.2), итерация %d", state.get("iteration", 1))
     profile = _deserialize_profile(state.get("project_meta", {}))
-    model = _router.select_model(TaskType.FIX)  # GPT-5.5
+    model = _router.select_model(TaskType.FIX)  # GLM 5.2
 
     # На повторной итерации — передаём предыдущий ревью как дополнительный контекст
     prompt = state["prompt"]
@@ -154,8 +154,8 @@ async def node_reviewer(state: PipelineState) -> dict:
 # ──────────────────────────────────────────────────────────────
 
 async def node_fix_developer(state: PipelineState) -> dict:
-    """GPT-5.5 исправляет баг (для gib fix — без шага архитектора)."""
-    logger.info("[pipeline] Шаг: fix-разработчик (GPT-5.5), итерация %d", state.get("iteration", 1))
+    """GLM 5.2 исправляет баг (для gib fix — без шага архитектора)."""
+    logger.info("[pipeline] Шаг: fix-разработчик (GLM 5.2), итерация %d", state.get("iteration", 1))
     profile = _deserialize_profile(state.get("project_meta", {}))
     model = _router.select_model(TaskType.FIX)
 

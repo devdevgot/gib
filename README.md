@@ -8,7 +8,7 @@ GIB анализирует ваш проект, строит граф агент
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![OpenRouter](https://img.shields.io/badge/LLM-OpenRouter-orange.svg)](https://openrouter.ai/)
-[![Version](https://img.shields.io/badge/version-0.1.5-green.svg)](https://github.com/devdevgot/gib)
+[![Version](https://img.shields.io/badge/version-0.1.6-green.svg)](https://github.com/devdevgot/gib)
 
 ---
 
@@ -40,7 +40,7 @@ gib    # первый запуск попросит API-ключ OpenRouter
 pip uninstall gib -y 2>/dev/null || true
 pipx install --force git+https://github.com/devdevgot/gib.git@main
 hash -r
-gib --version   # 0.1.5
+gib --version   # 0.1.6
 ```
 
 ### Разработка из исходников
@@ -84,7 +84,7 @@ gib set-key                         # обновить API-ключ
 | Роль | Модель OpenRouter | Задачи |
 |------|-------------------|--------|
 | **Архитектор** | `anthropic/claude-opus-4.8` | Планирование, архитектура, рефакторинг, объяснения, чат |
-| **Разработчик** | `openai/gpt-5.5` | Код, багфиксы, тесты, коммиты, watch |
+| **Разработчик** | [`z-ai/glm-5.2`](https://openrouter.ai/z-ai/glm-5.2) | Код, багфиксы, тесты, коммиты, watch |
 | **Исследователь** | `google/gemini-2.5-pro` | Best practices, документация, совместимость |
 | **Ревьюер** | `google/gemini-2.5-pro` | Код-ревью, doctor, длинный контекст |
 | **Вспомогательные** | `gemini-2.5-flash` / `deepseek-v3.2` | file finder, дешёвые вспомогательные вызовы |
@@ -100,7 +100,7 @@ gib set-key                         # обновить API-ключ
 
 models:
   default: "anthropic/claude-opus-4.8"   # архитектор
-  code: "openai/gpt-5.5"                  # разработчик
+  code: "z-ai/glm-5.2"                    # разработчик
   reviewer: "google/gemini-2.5-pro"       # ревьюер
   fast: "google/gemini-2.5-flash"
   cheap: "deepseek/deepseek-v3.2"
@@ -110,7 +110,7 @@ routing:
     - task_type: "architecture"
       model: "anthropic/claude-opus-4.8"
     - task_type: "development"
-      model: "openai/gpt-5.5"
+      model: "z-ai/glm-5.2"
     - task_type: "research"
       model: "google/gemini-2.5-pro"
     - task_type: "review"
@@ -164,7 +164,7 @@ gib resume --id <uuid>  # продолжить конкретную задачу
        │
        ├──────────────────┐
        ▼                  ▼
-  Разработчик (GPT-5.5)   Исследователь (Gemini 2.5 Pro)   ← параллельно
+  Разработчик (GLM 5.2)   Исследователь (Gemini 2.5 Pro)   ← параллельно
        │                  │
        └────────┬─────────┘
                 ▼

@@ -18,7 +18,7 @@ class PipelineState(TypedDict):
 
     # Выходы каждого агента
     architect_plan: str          # Claude: архитектурный план
-    developer_code: str          # GPT-5.5: реализованный код
+    developer_code: str          # GLM 5.2: реализованный код
     review_result: str           # Gemini: результат ревью
     review_verdict: str          # "approved" | "needs_fix" | "rejected"
 

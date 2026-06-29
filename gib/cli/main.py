@@ -165,7 +165,7 @@ def cmd_ask(
 
     async def _run_it():
         orch = _get_orchestrator()
-        with ui.spinner("[cyan]Claude[/] анализирует → [cyan]GPT-5.5[/] пишет → [cyan]Gemini[/] ревьюит..."):
+        with ui.spinner("[cyan]Claude[/] анализирует → [cyan]GLM 5.2[/] пишет → [cyan]Gemini[/] ревьюит..."):
             result = await orch.run_general(prompt)
         ui.print_project_info(result)
         ui.print_result(result)
@@ -224,7 +224,7 @@ def cmd_fix(
     async def _run_it():
         orch = _get_orchestrator()
         resolved = [Path(p) for p in paths] if paths else None
-        with ui.spinner("[cyan]GPT-5.5[/] исправляет → [cyan]Gemini[/] проверяет..."):
+        with ui.spinner("[cyan]GLM 5.2[/] исправляет → [cyan]Gemini[/] проверяет..."):
             result = await orch.run_fix(resolved, error=error)
         ui.print_project_info(result)
         ui.print_result(result)
@@ -246,7 +246,7 @@ def cmd_refactor(
 
     async def _run_it():
         orch = _get_orchestrator()
-        with ui.spinner("[cyan]Claude[/] планирует → [cyan]GPT-5.5[/] рефакторит → [cyan]Gemini[/] проверяет..."):
+        with ui.spinner("[cyan]Claude[/] планирует → [cyan]GLM 5.2[/] рефакторит → [cyan]Gemini[/] проверяет..."):
             result = await orch.run_refactor([Path(p) for p in paths])
         ui.print_project_info(result)
         ui.print_result(result)
