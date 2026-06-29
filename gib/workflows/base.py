@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import uuid
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Any
 
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from gib.core.state import GibState
 from gib.providers.errors import CreditsExhaustedError
+from gib.utils.project_root import get_project_root
 from gib.workflows.checkpoint import checkpoint_conn_string
 
 
@@ -34,6 +36,7 @@ class BaseWorkflow(ABC):
         *,
         thread_id: str | None = None,
         resume: bool = False,
+        project_root: Path | str | None = None,
     ) -> GibState:
         """
         Запускает граф с checkpoint.
@@ -43,8 +46,11 @@ class BaseWorkflow(ABC):
         """
         thread_id = thread_id or str(uuid.uuid4())
         config = {"configurable": {"thread_id": thread_id}}
+        resolved_root = project_root or get_project_root(initial_state)
 
-        async with AsyncSqliteSaver.from_conn_string(checkpoint_conn_string()) as checkpointer:
+        async with AsyncSqliteSaver.from_conn_string(
+            checkpoint_conn_string(resolved_root)
+        ) as checkpointer:
             graph = cls.build_graph().compile(checkpointer=checkpointer)
             try:
                 if resume:

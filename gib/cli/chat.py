@@ -38,7 +38,7 @@ async def start_chat(*, resume: bool = True) -> None:
 
     router = ModelRouter()
     client = OpenRouterClient()
-    memory = MemoryStore()
+    memory = MemoryStore(project_root=project_path)
 
     # Загружаем контекст проекта (файлы + память)
     project_state = make_initial_state(

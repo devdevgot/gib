@@ -1,10 +1,12 @@
 """LangGraph checkpoint path helper."""
 from __future__ import annotations
 
-from gib.config import get_config
+from pathlib import Path
+
+from gib.utils.project_dirs import checkpoint_db_path
 
 
-def checkpoint_conn_string() -> str:
+def checkpoint_conn_string(project_root: Path | str | None = None) -> str:
     """SQLite connection string for LangGraph AsyncSqliteSaver."""
-    path = get_config().checkpoint_db_path()
+    path = checkpoint_db_path(project_root)
     return f"sqlite:///{path}"

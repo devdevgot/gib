@@ -74,8 +74,8 @@ agents:
   timeout: 300
 
 memory:
-  db_path: "~/.gib/memory.db"
-  checkpoint_db_path: "~/.gib/checkpoints.db"
+  db_path: ".gib/memory.db"
+  checkpoint_db_path: ".gib/checkpoints.db"
   max_history: 1000
 
 ui:
@@ -92,4 +92,4 @@ security:
 
 logging:
   level: "INFO"
-  log_dir: "~/.gib/logs"
+  log_dir: ".gib/logs"

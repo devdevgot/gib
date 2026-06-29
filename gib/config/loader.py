@@ -10,9 +10,9 @@ import yaml
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
-load_dotenv()
+from gib.utils.project_dirs import resolve_project_root
 
-# Bundled config — ships with the package
+load_dotenv()
 _BUNDLED_CONFIG = Path(__file__).parent.parent.parent / "config.yaml"
 
 _CONFIG_SEARCH_PATHS = [
@@ -60,9 +60,9 @@ class AgentsConfig(BaseModel):
 
 
 class MemoryConfig(BaseModel):
-    db_path: str = "~/.gib/memory.db"
+    db_path: str = ".gib/memory.db"
     max_history: int = 1000
-    checkpoint_db_path: str = "~/.gib/checkpoints.db"
+    checkpoint_db_path: str = ".gib/checkpoints.db"
 
 
 class SecurityConfig(BaseModel):
@@ -85,7 +85,7 @@ class RoutingConfig(BaseModel):
 
 class LoggingConfig(BaseModel):
     level: str = "INFO"
-    log_dir: str = "~/.gib/logs"
+    log_dir: str = ".gib/logs"
 
 
 class Config(BaseModel):
@@ -121,18 +121,36 @@ class Config(BaseModel):
                 return rule.model
         return self.models.default
 
-    def memory_db_path(self) -> Path:
+    def memory_db_path(self, project_root: Path | str | None = None) -> Path:
+        from gib.utils.project_dirs import memory_db_path as resolve_memory_db_path
+
+        if self.memory.db_path in (".gib/memory.db", "~/.gib/memory.db"):
+            return resolve_memory_db_path(project_root)
         path = Path(self.memory.db_path).expanduser()
+        if not path.is_absolute():
+            path = resolve_project_root(project_root) / path
         path.parent.mkdir(parents=True, exist_ok=True)
         return path
 
-    def checkpoint_db_path(self) -> Path:
+    def checkpoint_db_path(self, project_root: Path | str | None = None) -> Path:
+        from gib.utils.project_dirs import checkpoint_db_path as resolve_checkpoint_db_path
+
+        if self.memory.checkpoint_db_path in (".gib/checkpoints.db", "~/.gib/checkpoints.db"):
+            return resolve_checkpoint_db_path(project_root)
         path = Path(self.memory.checkpoint_db_path).expanduser()
+        if not path.is_absolute():
+            path = resolve_project_root(project_root) / path
         path.parent.mkdir(parents=True, exist_ok=True)
         return path
 
-    def log_dir_path(self) -> Path:
+    def log_dir_path(self, project_root: Path | str | None = None) -> Path:
+        from gib.utils.project_dirs import log_dir_path as resolve_log_dir_path
+
+        if self.logging.log_dir in (".gib/logs", "~/.gib/logs"):
+            return resolve_log_dir_path(project_root)
         path = Path(self.logging.log_dir).expanduser()
+        if not path.is_absolute():
+            path = resolve_project_root(project_root) / path
         path.mkdir(parents=True, exist_ok=True)
         return path
 

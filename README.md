@@ -125,7 +125,7 @@ API-ключ хранится в `~/.gib/.env` (`OPENROUTER_API_KEY=sk-or-...`).
 
 ## Возобновление после нехватки кредитов
 
-При ошибке баланса OpenRouter GIB сохраняет checkpoint в `~/.gib/checkpoints.db` и метаданные задачи в `~/.gib/memory.db`.
+При ошибке баланса OpenRouter GIB сохраняет checkpoint в `<проект>/.gib/checkpoints.db` и метаданные задачи в `<проект>/.gib/memory.db`.
 
 ```bash
 gib resume              # продолжить последнюю приостановленную задачу
@@ -198,10 +198,13 @@ gib/
 
 | Файл | Назначение |
 |------|------------|
-| `~/.gib/memory.db` | История задач, чат-сессии, профили проектов, paused runs |
-| `~/.gib/checkpoints.db` | LangGraph checkpoints для `gib resume` |
-| `~/.gib/config.yaml` | Модели и маршрутизация |
-| `~/.gib/.env` | `OPENROUTER_API_KEY` |
+| `<проект>/.gib/memory.db` | История задач, чат-сессии, профили проекта, paused runs |
+| `<проект>/.gib/checkpoints.db` | LangGraph checkpoints для `gib resume` |
+| `<проект>/.gib/logs/` | Логи сессий |
+| `~/.gib/config.yaml` | Модели и маршрутизация (глобально) |
+| `~/.gib/.env` | `OPENROUTER_API_KEY` (глобально) |
+
+Каждый проект хранит память и checkpoints локально в `.gib/` — переключение между проектами не вызывает конфликтов SQLite.
 
 Контекст предыдущих задач и чата подмешивается в новые workflow автоматически.
 

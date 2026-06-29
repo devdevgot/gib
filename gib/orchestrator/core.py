@@ -130,7 +130,7 @@ class Orchestrator:
         self.root = (root or Path.cwd()).resolve()
         self._config = get_config()
         self._router = ModelRouter()
-        self._memory = MemoryStore()
+        self._memory = MemoryStore(project_root=self.root)
         self._profile: ProjectProfile | None = None
 
     async def _get_profile(self) -> ProjectProfile | None:
@@ -196,6 +196,7 @@ class Orchestrator:
                     {},
                     thread_id=thread_id,
                     resume=True,
+                    project_root=run.project_path,
                 )
                 self._memory.complete_workflow_run(thread_id)
                 return final_state, profile
@@ -233,6 +234,7 @@ class Orchestrator:
                 initial,
                 thread_id=thread_id,
                 resume=False,
+                project_root=str(self.root),
             )
             self._memory.complete_workflow_run(thread_id)
             return final_state, profile
