@@ -65,5 +65,6 @@ class Container:
             return self._overrides["memory_store"]
         if not hasattr(self, "_memory_store"):
             from gib.memory.store import MemoryStore
-            self._memory_store = MemoryStore()
+            from pathlib import Path
+            self._memory_store = MemoryStore(project_root=Path.cwd())
         return self._memory_store

@@ -76,6 +76,7 @@ class WorkflowRegistry:
         *,
         thread_id: str | None = None,
         resume: bool = False,
+        project_root: str | None = None,
     ) -> dict:
         """Запускает workflow и возвращает финальное состояние."""
         _load_all()
@@ -84,6 +85,7 @@ class WorkflowRegistry:
             initial_state,
             thread_id=thread_id,
             resume=resume,
+            project_root=project_root,
         )
 
 

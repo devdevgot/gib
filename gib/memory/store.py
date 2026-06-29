@@ -21,6 +21,7 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from gib.config import get_config
 from gib.utils import get_logger
+from gib.utils.project_dirs import ensure_project_data_layout, memory_db_path as resolve_memory_db_path
 
 logger = get_logger("gib.memory")
 
@@ -89,8 +90,17 @@ class WorkflowRunRecord(Base):
 class MemoryStore:
     """Manages all persistent memory for GIB."""
 
-    def __init__(self, db_path: Path | None = None) -> None:
-        path = db_path or get_config().memory_db_path()
+    def __init__(
+        self,
+        db_path: Path | None = None,
+        project_root: Path | str | None = None,
+    ) -> None:
+        if db_path is None:
+            ensure_project_data_layout(project_root)
+            path = resolve_memory_db_path(project_root)
+        else:
+            path = db_path
+        path.parent.mkdir(parents=True, exist_ok=True)
         self._engine = create_engine(f"sqlite:///{path}", echo=False)
         Base.metadata.create_all(self._engine)
         self._session_factory = sessionmaker(bind=self._engine)

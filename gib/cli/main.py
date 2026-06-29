@@ -484,6 +484,10 @@ def cmd_resume(
 @app.command("free")
 def cmd_free(
     prompt: Annotated[str, typer.Argument(help="Задача для выполнения")],
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", "-y", help="Применить изменения без подтверждения"),
+    ] = False,
 ) -> None:
     """Выполнить задачу на бесплатных моделях (без затрат).
 
@@ -497,7 +501,7 @@ def cmd_free(
         with ui.spinner(
             "[cyan]Nemotron[/] планирует → [cyan]NorthMini[/] пишет → [cyan]Laguna[/] ревьюит... [dim](free)[/]"
         ):
-            result = await orch.run_free(prompt)
+            result = await orch.run_free(prompt, auto_apply=yes)
         ui.print_project_info(result)
         ui.print_result(result)
 

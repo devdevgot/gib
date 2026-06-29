@@ -12,9 +12,9 @@ class MemoryAgent(BaseAgent):
 
     name = "memory_agent"
 
-    def __init__(self) -> None:
+    def __init__(self, project_root: str = "") -> None:
         super().__init__()
-        self._store = MemoryStore()
+        self._store = MemoryStore(project_root=project_root or None)
 
     async def run(
         self,
