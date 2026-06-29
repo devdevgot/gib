@@ -14,6 +14,7 @@ from pathlib import Path
 from gib.core.container import Container
 from gib.core.state import GibState
 from gib.prompts.locale import RUSSIAN_ONLY
+from gib.utils.request import expand_keywords
 from gib.utils import get_logger
 from gib.utils.project_root import get_project_root
 
@@ -243,7 +244,7 @@ async def node_file_finder(state: GibState) -> dict:
     all_files = state.get("metadata", {}).get("all_project_files") or _list_all_files(root)
     logger.info("[file_finder] Всего файлов: %d", len(all_files))
 
-    keywords = _extract_keywords(task)
+    keywords = expand_keywords(_extract_keywords(task))
     candidates = _grep_candidates(root, keywords)
     logger.info("[file_finder] grep-кандидаты: %d файлов", len(candidates))
 

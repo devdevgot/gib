@@ -107,9 +107,10 @@ def _ensure_api_key() -> None:
 def _print_help() -> None:
     console.print(Panel.fit(
         "[bold cyan]GIB[/] — AI-ассистент для разработки\n\n"
-        "[dim]Свободная задача:[/]\n"
-        "  [cyan]gib \"Добавь JWT аутентификацию\"[/]\n"
-        "  [cyan]gib \"Исправь ошибку в auth.py\"[/]\n\n"
+        "[dim]Свободная задача (без кавычек):[/]\n"
+        "  [cyan]gib улучши страницу дашборда[/]\n"
+        "  [cyan]gib добавь валидацию в форму регистрации[/]\n"
+        "  [cyan]gib -y исправь медленную загрузку списка[/]  [dim](без подтверждения)[/]\n\n"
         "[dim]Команды:[/]\n"
         "  [cyan]gib review[/]            [dim]Код-ревью[/]\n"
         "  [cyan]gib fix [файл][/]        [dim]Исправить баги[/]\n"
@@ -157,16 +158,30 @@ def main(
 
 @app.command("ask", hidden=True)
 def cmd_ask(
-    prompt: Annotated[str, typer.Argument(help="Свободная задача для выполнения")],
+    prompt_parts: Annotated[
+        list[str],
+        typer.Argument(help="Свободная задача — можно без кавычек"),
+    ],
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", "-y", help="Применить изменения без подтверждения"),
+    ] = False,
 ) -> None:
     """Выполнить задачу разработки по свободному запросу (внутренняя команда)."""
+    from gib.utils.request import join_prompt_args, enrich_user_request
+
+    prompt = enrich_user_request(join_prompt_args(prompt_parts))
+    if not prompt:
+        console.print("[red]Укажите задачу, например: gib улучши страницу дашборда[/]")
+        raise typer.Exit(1)
+
     _ensure_api_key()
     from gib.cli import ui
 
     async def _run_it():
         orch = _get_orchestrator()
         with ui.spinner("[cyan]Claude[/] анализирует → [cyan]GLM 5.2[/] пишет → [cyan]Gemini[/] ревьюит..."):
-            result = await orch.run_general(prompt)
+            result = await orch.run_general(prompt, auto_apply=yes)
         ui.print_project_info(result)
         ui.print_result(result)
 

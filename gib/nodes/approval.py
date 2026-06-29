@@ -118,14 +118,19 @@ async def node_approval(state: GibState) -> dict:
             "logs": [f"[Approval] BLOCKED by {len(critical_issues)} critical security issues"],
         }
 
-    # Запрашиваем подтверждение
-    try:
-        approved = Confirm.ask(
-            "\n[bold]Применить эти изменения?[/bold]",
-            default=False,
-        )
-    except (KeyboardInterrupt, EOFError):
-        approved = False
+    auto_apply = bool(state.get("metadata", {}).get("auto_apply"))
+    if auto_apply:
+        console.print("\n[dim]Автоприменение включено — изменения будут записаны без подтверждения.[/]\n")
+        approved = True
+    else:
+        # Запрашиваем подтверждение
+        try:
+            approved = Confirm.ask(
+                "\n[bold]Применить эти изменения?[/bold]",
+                default=False,
+            )
+        except (KeyboardInterrupt, EOFError):
+            approved = False
 
     if approved:
         status = ApprovalStatus.APPROVED.value

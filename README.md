@@ -8,7 +8,7 @@ GIB анализирует ваш проект, строит граф агент
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![OpenRouter](https://img.shields.io/badge/LLM-OpenRouter-orange.svg)](https://openrouter.ai/)
-[![Version](https://img.shields.io/badge/version-0.1.6-green.svg)](https://github.com/devdevgot/gib)
+[![Version](https://img.shields.io/badge/version-0.1.7-green.svg)](https://github.com/devdevgot/gib)
 
 ---
 
@@ -29,7 +29,8 @@ GIB анализирует ваш проект, строит граф агент
 
 ```bash
 pipx install git+https://github.com/devdevgot/gib.git
-gib    # первый запуск попросит API-ключ OpenRouter
+gib улучши страницу дашборда          # свободная задача — без кавычек
+gib -y добавь кнопку экспорта в таблицу  # применить без подтверждения
 ```
 
 Получить ключ: [openrouter.ai/keys](https://openrouter.ai/keys)
@@ -40,7 +41,7 @@ gib    # первый запуск попросит API-ключ OpenRouter
 pip uninstall gib -y 2>/dev/null || true
 pipx install --force git+https://github.com/devdevgot/gib.git@main
 hash -r
-gib --version   # 0.1.6
+gib --version   # 0.1.7
 ```
 
 ### Разработка из исходников
@@ -58,7 +59,8 @@ pytest
 ## Команды
 
 ```bash
-gib "Добавь JWT авторизацию"       # свободная задача — полный пайплайн
+gib улучши страницу дашборда       # свободная задача — без кавычек
+gib -y добавь валидацию email      # применить изменения сразу
 gib review [файлы]                  # код-ревью + security scan
 gib fix [файлы] --error "..."       # исправить баги
 gib refactor <файлы>                # рефакторинг по SOLID

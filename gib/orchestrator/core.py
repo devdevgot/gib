@@ -176,6 +176,7 @@ class Orchestrator:
         task_type: str = "",
         thread_id: str | None = None,
         resume: bool = False,
+        auto_apply: bool = False,
     ) -> tuple[GibState, ProjectProfile | None]:
         """Запускает workflow с checkpoint; при нехватке кредитов сохраняет прогресс."""
         profile = await self._get_profile()
@@ -223,6 +224,8 @@ class Orchestrator:
             project_root=str(self.root),
         )
         initial["session_context"] = session_context
+        if auto_apply or self._config.security.auto_apply:
+            initial["metadata"] = {"auto_apply": True}
 
         try:
             final_state = await WorkflowRegistry.run(
@@ -260,11 +263,14 @@ class Orchestrator:
 
     # ── Public API (совместим с CLI командами) ───────────────────────────────
 
-    async def run_general(self, prompt: str) -> OrchestratorResult:
+    async def run_general(self, prompt: str, *, auto_apply: bool = False) -> OrchestratorResult:
         """gib ask — Feature workflow."""
         start = time.monotonic()
         final_state, profile = await self._run_workflow(
-            WorkflowType.FEATURE, prompt, task_type=str(TaskType.GENERAL)
+            WorkflowType.FEATURE,
+            prompt,
+            task_type=str(TaskType.GENERAL),
+            auto_apply=auto_apply,
         )
         elapsed = int((time.monotonic() - start) * 1000)
         self._persist(str(TaskType.GENERAL), prompt, final_state)
