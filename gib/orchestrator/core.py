@@ -468,6 +468,7 @@ class Orchestrator:
             WorkflowType.FREE,
             prompt,
             task_type="free",
+            auto_apply=auto_apply,
         )
         # Вставляем free модели обратно в финальный state для отображения в UI
         if "selected_models" not in final_state:

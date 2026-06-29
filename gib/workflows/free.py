@@ -49,9 +49,10 @@ def _route_after_review_free(state: GibState) -> str:
     - одобрено или лимит → patch_builder
     """
     verdict = state.get("review_verdict", ReviewVerdict.APPROVED.value)
-    iteration = state.get("review_iteration", 0)
+    # reviewer увеличивает review_iteration перед возвратом (1 → 2 после первого ревью)
+    iteration = state.get("review_iteration", 1)
 
-    if verdict == ReviewVerdict.NEEDS_FIX.value and iteration <= _MAX_REVIEW_ITERS:
+    if verdict == ReviewVerdict.NEEDS_FIX.value and iteration <= _MAX_REVIEW_ITERS + 1:
         return "fixer_free"
     return "patch_builder"
 
