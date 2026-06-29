@@ -3,6 +3,8 @@ from pathlib import Path
 
 from gib.utils.project_dirs import (
     checkpoint_db_path,
+    cleanup_legacy_global_databases,
+    ensure_gitignore,
     log_dir_path,
     memory_db_path,
     project_data_dir,
@@ -75,3 +77,59 @@ def test_checkpoint_conn_string_uses_project_path(tmp_path):
     conn = checkpoint_conn_string(project)
     expected = project / ".gib" / "checkpoints.db"
     assert conn == f"sqlite:///{expected}"
+
+
+def test_ensure_gitignore_creates_file(tmp_path):
+    project = tmp_path / "repo"
+    project.mkdir()
+
+    changed = ensure_gitignore(project)
+    assert changed is True
+    content = (project / ".gitignore").read_text(encoding="utf-8")
+    assert ".gib/" in content
+
+
+def test_ensure_gitignore_skips_if_present(tmp_path):
+    project = tmp_path / "repo"
+    project.mkdir()
+    (project / ".gitignore").write_text(".gib/\n", encoding="utf-8")
+
+    assert ensure_gitignore(project) is False
+
+
+def test_ensure_gitignore_appends_to_existing(tmp_path):
+    project = tmp_path / "repo"
+    project.mkdir()
+    (project / ".gitignore").write_text("node_modules/\n", encoding="utf-8")
+
+    assert ensure_gitignore(project) is True
+    content = (project / ".gitignore").read_text(encoding="utf-8")
+    assert "node_modules/" in content
+    assert ".gib/" in content
+
+
+def test_cleanup_legacy_global_databases(tmp_path, monkeypatch):
+    gib_dir = tmp_path / ".gib"
+    gib_dir.mkdir()
+    memory = gib_dir / "memory.db"
+    checkpoints = gib_dir / "checkpoints.db"
+    memory.write_text("legacy", encoding="utf-8")
+    checkpoints.write_text("legacy", encoding="utf-8")
+
+    monkeypatch.setattr("gib.utils.project_dirs.Path.home", lambda: tmp_path)
+
+    removed = cleanup_legacy_global_databases()
+    assert memory in removed
+    assert checkpoints in removed
+    assert not memory.exists()
+    assert not checkpoints.exists()
+
+
+def test_memory_store_adds_gitignore(tmp_path):
+    from gib.memory.store import MemoryStore
+
+    project = tmp_path / "repo"
+    project.mkdir()
+
+    MemoryStore(project_root=project)
+    assert (project / ".gitignore").read_text(encoding="utf-8").count(".gib/") >= 1
