@@ -57,9 +57,11 @@ def _setup_api_key() -> str:
     gib_dir.mkdir(parents=True, exist_ok=True)
     env_file = gib_dir / ".env"
 
+    from gib.utils.theme import BLUE_DIM, GREEN, TEXT_DIM
+
     console.print()
-    console.print("[bold cyan]GIB[/] — первый запуск, нужен API ключ OpenRouter")
-    console.print("[dim]Получить ключ:[/] [cyan]https://openrouter.ai/keys[/]")
+    console.print(f"[bold {GREEN}]GIB[/] [dim {TEXT_DIM}]— первый запуск, нужен API ключ OpenRouter[/]")
+    console.print(f"[dim {TEXT_DIM}]Получить ключ:[/] [bold {BLUE_DIM}]https://openrouter.ai/keys[/]")
     console.print()
 
     while True:
@@ -80,7 +82,7 @@ def _setup_api_key() -> str:
     import os
     os.environ["OPENROUTER_API_KEY"] = key
 
-    console.print(f"[green]  ✓ Ключ сохранён в {env_file}[/]")
+    console.print(f"[success]✓[/] Ключ сохранён в {env_file}")
     console.print()
     return key
 
@@ -105,31 +107,8 @@ def _ensure_api_key() -> None:
 
 
 def _print_help() -> None:
-    console.print(Panel.fit(
-        "[bold cyan]GIB[/] — AI-ассистент для разработки\n\n"
-        "[dim]Свободная задача (без кавычек):[/]\n"
-        "  [cyan]gib улучши страницу дашборда[/]\n"
-        "  [cyan]gib добавь валидацию в форму регистрации[/]\n"
-        "  [cyan]gib -y исправь медленную загрузку списка[/]  [dim](без подтверждения)[/]\n\n"
-        "[dim]Git (свободная фраза):[/]\n"
-        "  [cyan]gib пушни[/]  [cyan]gib сделай пулл[/]  [cyan]gib мержни main[/]\n"
-        "  [cyan]gib добавь в гит[/]  [cyan]gib статус гита[/]\n\n"
-        "[dim]Команды:[/]\n"
-        "  [cyan]gib review[/]            [dim]Код-ревью[/]\n"
-        "  [cyan]gib fix [файл][/]        [dim]Исправить баги[/]\n"
-        "  [cyan]gib refactor [путь][/]   [dim]Рефакторинг кода[/]\n"
-        "  [cyan]gib test [файл][/]       [dim]Сгенерировать тесты[/]\n"
-        "  [cyan]gib docs [файл][/]       [dim]Сгенерировать документацию[/]\n"
-        "  [cyan]gib commit[/]            [dim]Умный git-коммит[/]\n"
-        "  [cyan]gib doctor[/]            [dim]Глубокая диагностика[/]\n"
-        "  [cyan]gib explain <путь>[/]    [dim]Объяснить код[/]\n"
-        "  [cyan]gib watch [папка][/]     [dim]Слежение за файлами[/]\n"
-        "  [cyan]gib chat[/]              [dim]Интерактивный чат[/]\n"
-        "  [cyan]gib resume[/]           [dim]Продолжить после нехватки кредитов[/]\n"
-        "  [cyan]gib set-key[/]           [dim]Изменить API ключ[/]",
-        border_style="cyan",
-        title="[bold]gib[/]",
-    ))
+    from gib.cli import ui
+    ui.print_help()
 
 
 # ─────────────────────────────────────────────────────────────
@@ -183,7 +162,7 @@ def cmd_ask(
 
     async def _run_it():
         orch = _get_orchestrator()
-        with ui.spinner("[cyan]Claude[/] анализирует → [cyan]GLM 5.2[/] пишет → [cyan]Gemini[/] ревьюит..."):
+        with ui.spinner("Claude анализирует → GLM пишет → Gemini ревьюит"):
             result = await orch.run_general(prompt, auto_apply=yes)
         ui.print_project_info(result)
         ui.print_result(result)
@@ -206,7 +185,7 @@ def cmd_review(
     async def _run_it():
         orch = _get_orchestrator()
         resolved = [Path(p) for p in paths] if paths else None
-        with ui.spinner("[cyan]Проверяю код...[/]"):
+        with ui.spinner("Проверяю код"):
             result = await orch.run_review(resolved)
         ui.print_project_info(result)
         ui.print_result(result)
@@ -216,7 +195,7 @@ def cmd_review(
             console.print()
             if ui.confirm("Исправить все найденные проблемы?"):
                 console.print()
-                with ui.spinner("[cyan]Исправляю проблемы...[/]"):
+                with ui.spinner("Исправляю проблемы"):
                     fix_result = await orch.run_fix(
                         paths=resolved,
                         review_context=result.primary_output,
@@ -242,7 +221,7 @@ def cmd_fix(
     async def _run_it():
         orch = _get_orchestrator()
         resolved = [Path(p) for p in paths] if paths else None
-        with ui.spinner("[cyan]GLM 5.2[/] исправляет → [cyan]Gemini[/] проверяет..."):
+        with ui.spinner("GLM исправляет → Gemini проверяет"):
             result = await orch.run_fix(resolved, error=error)
         ui.print_project_info(result)
         ui.print_result(result)
@@ -264,7 +243,7 @@ def cmd_refactor(
 
     async def _run_it():
         orch = _get_orchestrator()
-        with ui.spinner("[cyan]Claude[/] планирует → [cyan]GLM 5.2[/] рефакторит → [cyan]Gemini[/] проверяет..."):
+        with ui.spinner("Claude планирует → GLM рефакторит → Gemini проверяет"):
             result = await orch.run_refactor([Path(p) for p in paths])
         ui.print_project_info(result)
         ui.print_result(result)
@@ -299,7 +278,7 @@ def cmd_git(
         cmd_commit(auto=yes)
         return
 
-    with console.status(f"[cyan]Выполняю:[/] {prompt}"):
+    with ui.spinner(f"Выполняю: {prompt}"):
         result = execute_git_intent(intent, repo_path=Path.cwd())
 
     if result.success:
@@ -324,7 +303,7 @@ def cmd_commit(
 
     async def _run_it():
         orch = _get_orchestrator()
-        with ui.spinner("[cyan]Генерирую сообщение коммита...[/]"):
+        with ui.spinner("Генерирую сообщение коммита"):
             result = await orch.run_commit()
 
         if not result.success:
@@ -332,10 +311,11 @@ def cmd_commit(
             raise typer.Exit(1)
 
         console.print()
+        from gib.utils.theme import BORDER, GREEN
         console.print(Panel(
             f"[bold]{result.primary_output}[/]",
-            title="[dim]Предлагаемое сообщение коммита[/]",
-            border_style="cyan",
+            title=f"[bold {GREEN}]●[/] [bold] Коммит[/]",
+            border_style=BORDER,
         ))
 
         git = GitIntegration(Path.cwd())
@@ -364,7 +344,7 @@ def cmd_doctor() -> None:
 
     async def _run_it():
         orch = _get_orchestrator()
-        with ui.spinner("[cyan]Запускаю диагностику...[/]"):
+        with ui.spinner("Запускаю диагностику"):
             result = await orch.run_doctor()
         ui.print_project_info(result)
         ui.print_result(result)
@@ -390,7 +370,7 @@ def cmd_explain(
 
     async def _run_it():
         orch = _get_orchestrator()
-        with ui.spinner(f"[cyan]Объясняю {path}...[/]"):
+        with ui.spinner(f"Объясняю {path}"):
             result = await orch.run_explain(path)
         ui.print_result(result)
 
@@ -412,7 +392,7 @@ def cmd_test(
     async def _run_it():
         orch = _get_orchestrator()
         resolved = [Path(p) for p in paths] if paths else None
-        with ui.spinner("[cyan]Генерирую тесты...[/]"):
+        with ui.spinner("Генерирую тесты"):
             result = await orch.run_test(resolved)
         ui.print_project_info(result)
         ui.print_result(result)
@@ -435,7 +415,7 @@ def cmd_docs(
     async def _run_it():
         orch = _get_orchestrator()
         resolved = [Path(p) for p in paths] if paths else None
-        with ui.spinner("[cyan]Генерирую документацию...[/]"):
+        with ui.spinner("Генерирую документацию"):
             result = await orch.run_docs(resolved)
         ui.print_project_info(result)
         ui.print_result(result)
@@ -456,7 +436,8 @@ def cmd_watch(
     from gib.cli.watch import start_watch
 
     watch_path = path or Path.cwd()
-    console.print(f"[cyan]Слежу за[/] {watch_path}  [dim](Ctrl+C для остановки)[/]")
+    from gib.utils.theme import GREEN, TEXT_DIM
+    console.print(f"[bold {GREEN}]●[/] Слежу за [bold]{watch_path}[/]  [dim {TEXT_DIM}](Ctrl+C)[/]")
     _run(start_watch(watch_path))
 
 
@@ -499,17 +480,18 @@ def cmd_resume(
             console.print("[dim]Нет приостановленных задач для этого проекта.[/]")
             raise typer.Exit()
         console.print("[bold]Приостановленные задачи:[/]\n")
+        from gib.utils.theme import GREEN, TEXT_DIM
         for run in runs:
             ts = run.updated_at.strftime("%Y-%m-%d %H:%M") if run.updated_at else "?"
             console.print(
-                f"  [cyan]{run.thread_id[:8]}…[/]  [dim]{ts}[/]  "
+                f"  [bold {GREEN}]{run.thread_id[:8]}…[/]  [dim {TEXT_DIM}]{ts}[/]  "
                 f"[bold]{run.workflow_type}[/]  {run.user_request[:60]}"
             )
-        console.print("\n[dim]Продолжить:[/] [cyan]gib resume --id <thread_id>[/]")
+        console.print(f"\n[dim {TEXT_DIM}]Продолжить:[/] [bold {GREEN}]gib resume --id <thread_id>[/]")
         raise typer.Exit()
 
     async def _run_it():
-        with ui.spinner("[cyan]Возобновляю задачу с последнего checkpoint..."):
+        with ui.spinner("Возобновляю задачу с checkpoint"):
             result = await orch.run_resume(thread_id)
         ui.print_project_info(result)
         ui.print_result(result)
@@ -538,9 +520,7 @@ def cmd_free(
 
     async def _run_it():
         orch = _get_orchestrator()
-        with ui.spinner(
-            "[cyan]Nemotron[/] планирует → [cyan]NorthMini[/] пишет → [cyan]Laguna[/] ревьюит... [dim](free)[/]"
-        ):
+        with ui.spinner("Nemotron → NorthMini → Laguna (free)"):
             result = await orch.run_free(prompt, auto_apply=yes)
         ui.print_project_info(result)
         ui.print_result(result)
@@ -558,11 +538,12 @@ def cmd_set_key() -> None:
     env_file = gib_dir / ".env"
 
     current = os.environ.get("OPENROUTER_API_KEY", "")
+    from gib.utils.theme import BLUE_DIM, GREEN, TEXT_DIM
     if current:
         masked = current[:8] + "..." + current[-4:]
-        console.print(f"[dim]Текущий ключ:[/] [cyan]{masked}[/]")
+        console.print(f"[dim {TEXT_DIM}]Текущий ключ:[/] [bold {GREEN}]{masked}[/]")
 
-    console.print("[dim]Получить ключ:[/] [cyan]https://openrouter.ai/keys[/]")
+    console.print(f"[dim {TEXT_DIM}]Получить ключ:[/] [bold {BLUE_DIM}]https://openrouter.ai/keys[/]")
     console.print()
 
     while True:
@@ -593,7 +574,7 @@ def cmd_set_key() -> None:
     env_file.write_text("\n".join(lines) + "\n")
     os.environ["OPENROUTER_API_KEY"] = key
 
-    console.print(f"[green]  ✓ Ключ обновлён в {env_file}[/]")
+    console.print(f"[success]✓[/] Ключ обновлён в {env_file}")
 
 
 if __name__ == "__main__":

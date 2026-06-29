@@ -8,6 +8,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 
 from gib.utils.console import console
+from gib.utils.theme import BORDER, GREEN, TEXT_DIM, prompt_prefix
 
 
 async def start_chat(*, resume: bool = True) -> None:
@@ -23,24 +24,27 @@ async def start_chat(*, resume: bool = True) -> None:
 
     project_path = str(Path.cwd().resolve())
 
-    console.print(Panel.fit(
-        "[bold cyan]GIB Chat[/]  [dim]Введите сообщение. 'exit' или Ctrl+C для выхода.[/]",
-        border_style="cyan",
+    console.print()
+    console.print(Panel(
+        f"[dim {TEXT_DIM}]Введите сообщение.[/] [bold]exit[/] [dim {TEXT_DIM}]или Ctrl+C для выхода.[/]",
+        title=f"[bold {GREEN}]●[/] [bold] GIB Chat[/]",
+        border_style=BORDER,
+        padding=(0, 2),
     ))
 
     analyzer = ProjectAnalyzer()
     profile = analyzer.analyze()
 
     console.print(
-        f"  [dim]Проект:[/] [cyan]{profile.language}[/] / [cyan]{profile.framework}[/]  "
-        f"[dim]Модель:[/] [model]{get_config().models.default}[/]\n"
+        f"  [dim {TEXT_DIM}]проект[/] [bold {GREEN}]{profile.language}[/]"
+        f" [dim {TEXT_DIM}]/[/] [bold {GREEN}]{profile.framework}[/]  "
+        f"[dim {TEXT_DIM}]модель[/] [dim]{get_config().models.default.split('/')[-1]}[/]\n"
     )
 
     router = ModelRouter()
     client = OpenRouterClient()
     memory = MemoryStore(project_root=project_path)
 
-    # Загружаем контекст проекта (файлы + память)
     project_state = make_initial_state(
         user_request="chat session",
         workflow_type="chat",
@@ -78,7 +82,7 @@ async def start_chat(*, resume: bool = True) -> None:
     session = memory.get_latest_session(project_path) if resume else None
     if session is None:
         session = memory.create_session(project_path=project_path)
-        console.print(f"  [dim]Новая сессия #{session.id}[/]\n")
+        console.print(f"  [dim {TEXT_DIM}]новая сессия #{session.id}[/]\n")
     else:
         prior = memory.get_session_messages(session.id)
         restored = 0
@@ -89,26 +93,25 @@ async def start_chat(*, resume: bool = True) -> None:
                 messages.append(ChatMessage(role=role, content=content))
                 restored += 1
         console.print(
-            f"  [dim]Возобновлена сессия #{session.id} ({restored} сообщений)[/]\n"
+            f"  [dim {TEXT_DIM}]сессия #{session.id} ({restored} сообщений)[/]\n"
         )
 
     total_cost = 0.0
 
     while True:
         try:
-            console.print("[bold cyan]Gib >[/] ", end="")
+            console.print(prompt_prefix(), end="")
             user_input = input("").strip()
         except (EOFError, KeyboardInterrupt):
-            console.print("\n[dim]Чат завершён[/]")
+            console.print(f"\n[dim {TEXT_DIM}]чат завершён[/]")
             break
 
         if not user_input:
             continue
         if user_input.lower() in ("exit", "quit", "q", "bye", "выход", "стоп"):
-            console.print("[dim]До свидания![/]")
+            console.print(f"[dim {TEXT_DIM}]до свидания![/]")
             break
 
-        # Подмешиваем содержимое упомянутых файлов
         user_content = user_input
         for path in all_files:
             if path in user_input and path in file_contents:
@@ -122,7 +125,7 @@ async def start_chat(*, resume: bool = True) -> None:
         task_type, model = router.route(user_input)
 
         try:
-            console.print(f"  [dim]({model})[/]")
+            console.print(f"  [dim {TEXT_DIM}]{model.split('/')[-1]}[/]")
             resp = await client.chat(
                 messages,
                 model=model,
@@ -145,12 +148,13 @@ async def start_chat(*, resume: bool = True) -> None:
             )
 
             console.print()
-            console.print(Markdown(resp.content))
+            console.print(Markdown(resp.content, code_theme="monokai"))
             console.print(
-                f"\n  [стоимость]${resp.cost_usd:.5f}[/]  "
-                f"[dim]{resp.latency_ms}ms  ·  всего ${total_cost:.4f}[/]\n"
+                f"\n  [dim {TEXT_DIM}]${resp.cost_usd:.5f}[/]"
+                f"  [dim {TEXT_DIM}]·[/]  {resp.latency_ms}ms"
+                f"  [dim {TEXT_DIM}]·[/]  всего ${total_cost:.4f}[/]\n"
             )
 
         except Exception as e:
-            console.print(f"[error]✗ {e}[/]")
+            console.print(f"[error]✗[/] {e}")
             messages.pop()

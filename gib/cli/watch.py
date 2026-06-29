@@ -81,7 +81,8 @@ async def start_watch(watch_path: Path) -> None:
                 except asyncio.QueueEmpty:
                     break
 
-            console.print(f"\n[cyan]Изменён:[/] {path}")
+            from gib.utils.theme import GREEN, TEXT_DIM
+            console.print(f"\n[bold {GREEN}]●[/] изменён: {path}")
             await _analyze_change(path)
 
     except KeyboardInterrupt:
