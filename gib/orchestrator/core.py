@@ -457,6 +457,24 @@ class Orchestrator:
             metadata=result.metadata,
         )
 
+    async def run_free(self, prompt: str, *, auto_apply: bool = False) -> OrchestratorResult:
+        """gibf — Free workflow (все модели :free tier, без затрат)."""
+        from gib.workflows.free import FREE_MODELS
+        start = time.monotonic()
+
+        final_state, profile = await self._run_workflow(
+            WorkflowType.FREE,
+            prompt,
+            task_type="free",
+        )
+        # Вставляем free модели обратно в финальный state для отображения в UI
+        if "selected_models" not in final_state:
+            final_state["selected_models"] = FREE_MODELS  # type: ignore[assignment]
+
+        elapsed = int((time.monotonic() - start) * 1000)
+        self._persist("free", prompt, final_state)
+        return _state_to_result(final_state, "free", elapsed, profile)
+
     @property
     def metadata(self) -> dict[str, Any]:
         return {}

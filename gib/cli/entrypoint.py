@@ -12,7 +12,7 @@ import sys
 
 _SUBCOMMANDS = {
     "review", "fix", "refactor", "commit", "doctor",
-    "explain", "test", "docs", "watch", "chat", "ask", "resume", "set-key",
+    "explain", "test", "docs", "watch", "chat", "ask", "resume", "set-key", "free",
 }
 
 

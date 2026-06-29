@@ -40,6 +40,7 @@ def _load_all() -> None:
     from gib.workflows.refactor import RefactorWorkflow
     from gib.workflows.explain import ExplainWorkflow
     from gib.workflows.doctor import DoctorWorkflow
+    from gib.workflows.free import FreeWorkflow
 
     _REGISTRY[WorkflowType.FEATURE.value] = FeatureWorkflow
     _REGISTRY[WorkflowType.BUGFIX.value] = BugFixWorkflow
@@ -47,6 +48,7 @@ def _load_all() -> None:
     _REGISTRY[WorkflowType.REFACTOR.value] = RefactorWorkflow
     _REGISTRY[WorkflowType.EXPLAIN.value] = ExplainWorkflow
     _REGISTRY[WorkflowType.DOCTOR.value] = DoctorWorkflow
+    _REGISTRY[WorkflowType.FREE.value] = FreeWorkflow
 
 
 class WorkflowRegistry:

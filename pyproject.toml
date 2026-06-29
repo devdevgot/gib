@@ -34,6 +34,7 @@ dev = [
 
 [project.scripts]
 gib = "gib.cli.entrypoint:main"
+gibf = "gib.cli.free_entrypoint:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
