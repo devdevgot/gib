@@ -22,7 +22,7 @@ app = typer.Typer(
 # Known subcommands — used by the entrypoint wrapper to route correctly
 _SUBCOMMANDS = {
     "review", "fix", "refactor", "commit", "doctor",
-    "explain", "test", "docs", "watch", "chat", "resume", "free",
+    "explain", "test", "docs", "watch", "chat", "resume", "free", "git",
 }
 
 
@@ -111,6 +111,9 @@ def _print_help() -> None:
         "  [cyan]gib улучши страницу дашборда[/]\n"
         "  [cyan]gib добавь валидацию в форму регистрации[/]\n"
         "  [cyan]gib -y исправь медленную загрузку списка[/]  [dim](без подтверждения)[/]\n\n"
+        "[dim]Git (свободная фраза):[/]\n"
+        "  [cyan]gib пушни[/]  [cyan]gib сделай пулл[/]  [cyan]gib мержни main[/]\n"
+        "  [cyan]gib добавь в гит[/]  [cyan]gib статус гита[/]\n\n"
         "[dim]Команды:[/]\n"
         "  [cyan]gib review[/]            [dim]Код-ревью[/]\n"
         "  [cyan]gib fix [файл][/]        [dim]Исправить баги[/]\n"
@@ -267,6 +270,43 @@ def cmd_refactor(
         ui.print_result(result)
 
     _run(_run_it())
+
+
+# ─────────────────────────────────────────────────────────────
+# gib git — push / pull / merge / add (свободная фраза)
+# ─────────────────────────────────────────────────────────────
+
+@app.command("git", hidden=True)
+def cmd_git(
+    prompt: Annotated[str, typer.Argument(help="Git-команда на естественном языке")],
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", "-y", help="Без подтверждения"),
+    ] = False,
+) -> None:
+    """Выполнить git-операцию по свободной фразе (пушни, пулл, мержни, добавь в гит)."""
+    from gib.cli import ui
+    from gib.git import GitAction, execute_git_intent, parse_git_intent
+
+    intent = parse_git_intent(prompt)
+    if not intent:
+        ui.print_error(
+            "Не распознал git-команду. Примеры: пушни, сделай пулл, мержни main, добавь в гит"
+        )
+        raise typer.Exit(1)
+
+    if intent.action == GitAction.COMMIT and not intent.commit_message:
+        cmd_commit(auto=yes)
+        return
+
+    with console.status(f"[cyan]Выполняю:[/] {prompt}"):
+        result = execute_git_intent(intent, repo_path=Path.cwd())
+
+    if result.success:
+        ui.print_success(result.message)
+    else:
+        ui.print_error(result.message)
+        raise typer.Exit(1)
 
 
 # ─────────────────────────────────────────────────────────────

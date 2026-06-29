@@ -107,6 +107,26 @@ gib docs gib/core/state.py
 
 ---
 
+### Git — свободные фразы
+
+GIB распознаёт git-команды на русском и английском без кавычек:
+
+```bash
+gib пушни                    # git push (с -u при первом push)
+gib сделай пулл              # git pull
+gib стяни main               # git pull origin main
+gib мержни main              # git merge main
+gib добавь в гит             # git add -A
+gib git add src/app.py       # git add конкретные файлы
+gib статус гита              # git status
+gib закоммить fix: typo      # git commit -m "..."
+gib закоммить                # AI-сообщение коммита (как gib commit)
+```
+
+Фразы вроде `gib добавь авторизацию` по-прежнему идут в AI-пайплайн, а не в git.
+
+---
+
 ### `gib commit [--auto]`
 
 Генерирует Conventional Commits сообщение по diff, предлагает закоммитить.
