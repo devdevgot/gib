@@ -1,6 +1,7 @@
 """OpenRouter API client — all models go through here."""
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import AsyncIterator
 
@@ -8,7 +9,7 @@ import httpx
 from pydantic import BaseModel
 
 from gib.config import get_config
-from gib.providers.errors import CreditsExhaustedError, is_credits_error
+from gib.providers.errors import CreditsExhaustedError, is_credits_error, is_rate_limit_error
 from gib.utils import get_logger
 
 logger = get_logger("gib.providers.openrouter")
@@ -144,6 +145,18 @@ class OpenRouterClient:
                         status_code=e.response.status_code,
                         details=body,
                     ) from e
+                if is_rate_limit_error(e.response.status_code, body):
+                    delay = min(60, 5 * (2 ** attempt))
+                    logger.warning(
+                        "OpenRouter rate limit (attempt %d), retry in %ds",
+                        attempt + 1,
+                        delay,
+                    )
+                    attempt += 1
+                    if attempt >= self._config.openrouter.max_retries:
+                        break
+                    await asyncio.sleep(delay)
+                    continue
                 # 400 with this model slug — don't retry, fail fast
                 if e.response.status_code == 400:
                     raise RuntimeError(

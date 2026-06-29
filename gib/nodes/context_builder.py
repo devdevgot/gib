@@ -219,7 +219,11 @@ async def node_context_builder(state: GibState) -> dict:
     root = get_project_root(state)
     target_paths = state.get("target_paths", [])
     workflow_type = state.get("workflow_type", "")
-    logger.info("[context_builder] workflow=%s, target=%s", workflow_type, target_paths)
+    meta = state.get("metadata", {})
+    free_mode = bool(meta.get("free_mode"))
+    per_file_max = int(meta.get("per_file_max_chars", _PER_FILE_MAX if not free_mode else 6000))
+    max_total = int(meta.get("max_total_chars", _MAX_TOTAL_CHARS if not free_mode else 200_000))
+    logger.info("[context_builder] workflow=%s, target=%s, free=%s", workflow_type, target_paths, free_mode)
 
     readme_content = ""
     deps_parts: list[str] = []
@@ -243,12 +247,13 @@ async def node_context_builder(state: GibState) -> dict:
     dependencies_raw = "\n\n".join(deps_parts)
     git_changed = _get_git_changed_files(root)
 
-    file_contents = _find_all_files(root, target_paths, per_file_max=_PER_FILE_MAX)
+    file_contents = _find_all_files(root, target_paths, per_file_max=per_file_max)
     if not target_paths:
         file_contents = _apply_total_cap(
             file_contents,
             target_paths=target_paths,
             git_changed=git_changed,
+            max_total=max_total,
         )
 
     chunks = make_file_chunks(file_contents, chunk_size=_CHUNK_SIZE)

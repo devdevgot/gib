@@ -79,19 +79,23 @@ gibf добавь авторизацию             # алиас для gib fre
 
 ### Бесплатный режим (`gibf`)
 
-Полный пайплайн на моделях OpenRouter `:free` — без затрат:
+Полный пайплайн на моделях OpenRouter `:free` — без затрат на платных моделях:
 
 | Роль | Модель |
 |------|--------|
 | Архитектор | `nvidia/nemotron-3-ultra-550b-a55b:free` |
 | Разработчик | `cohere/north-mini-code:free` |
 | Ревьюер | `poolside/laguna-m.1:free` |
+| File finder | `nvidia/nemotron-3-super-120b-a12b:free` |
+| Security | `nvidia/nemotron-3-ultra-550b-a55b:free` |
 
 ```bash
 gibf добавь кнопку экспорта в таблицу
+gibf -y исправь опечатку в README
 gib free "исправь баги в auth.py"
-gib free "задача" -y                # применить без подтверждения
 ```
+
+Простые задачи (fix, опечатка, rename) идут напрямую к разработчику; сложные — через архитектора и ревью. Перед патчем — статический + LLM security scan.
 
 Подробные примеры — в [`COMMANDS.md`](./COMMANDS.md).
 

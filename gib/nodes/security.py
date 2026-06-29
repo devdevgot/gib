@@ -5,15 +5,32 @@
 """
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from gib.core.container import Container
 from gib.core.state import GibState
 from gib.core.types import SecurityIssue
+from gib.prompts.locale import RUSSIAN_ONLY
 from gib.utils import get_logger
 
 logger = get_logger("gib.nodes.security")
+
+_SECURITY_LLM_SYSTEM = f"""\
+Ты — инженер по безопасности. Проверь сгенерированный код на уязвимости.
+
+Ищи: секреты в коде, SQL-инъекции, XSS, обход авторизации, слабую криптографию,
+инъекции команд, небезопасную десериализацию.
+
+Верни ТОЛЬКО JSON-массив объектов:
+[{{"severity": "critical|high|medium|low", "category": "...", "file": "...", "line": 0, "description": "...", "recommendation": "..."}}]
+
+Если проблем нет — верни [].
+
+{RUSSIAN_ONLY}
+"""
 
 # ── Статические правила ──────────────────────────────────────────────────────
 
@@ -121,6 +138,75 @@ def _scan_content(content: str, file_path: str) -> list[SecurityIssue]:
     return issues
 
 
+def _parse_llm_security_issues(raw: str) -> list[SecurityIssue]:
+    """Парсит JSON-ответ LLM security review."""
+    content = raw.strip()
+    if "```" in content:
+        match = re.search(r"```(?:json)?\s*(\[[\s\S]+?\])\s*```", content)
+        if match:
+            content = match.group(1)
+    match = re.search(r"\[[\s\S]*\]", content)
+    if not match:
+        return []
+    try:
+        items = json.loads(match.group(0))
+    except json.JSONDecodeError:
+        return []
+
+    issues: list[SecurityIssue] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        issues.append(SecurityIssue(
+            severity=str(item.get("severity", "medium")),
+            category=str(item.get("category", "llm_review")),
+            file=str(item.get("file", "<сгенерированный_код>")),
+            line=int(item.get("line", 0) or 0),
+            description=str(item.get("description", ""))[:500],
+            recommendation=str(item.get("recommendation", ""))[:500],
+        ))
+    return issues
+
+
+async def _llm_security_review(state: GibState, model: str) -> list[SecurityIssue]:
+    """LLM-проверка безопасности для free workflow."""
+    code = state.get("code_result", "")
+    if not code:
+        return []
+
+    relevant = state.get("relevant_files", [])[:5]
+    file_contents = state.get("file_contents", {})
+    snippets = []
+    for path in relevant:
+        content = file_contents.get(path, "")
+        if content:
+            snippets.append(f"### {path}\n```\n{content[:4000]}\n```")
+
+    prompt = f"""## Задача
+{state.get("user_request", "")}
+
+## Сгенерированный код
+{code[:12000]}
+
+## Контекст проекта
+{chr(10).join(snippets) if snippets else "(нет дополнительных файлов)"}
+"""
+
+    container = Container.instance()
+    from gib.providers import ChatMessage
+
+    resp = await container.openrouter_client().chat(
+        [
+            ChatMessage(role="system", content=_SECURITY_LLM_SYSTEM),
+            ChatMessage(role="user", content=prompt),
+        ],
+        model=model,
+        temperature=0.0,
+        max_tokens=2048,
+    )
+    return _parse_llm_security_issues(resp.content)
+
+
 async def node_security(state: GibState) -> dict:
     """
     LangGraph Node: статический анализ безопасности.
@@ -141,6 +227,15 @@ async def node_security(state: GibState) -> dict:
     if code_result:
         issues = _scan_content(code_result, "<сгенерированный_код>")
         all_issues.extend(issues)
+
+    security_model = state.get("selected_models", {}).get("security")
+    if security_model:
+        try:
+            llm_issues = await _llm_security_review(state, security_model)
+            all_issues.extend(llm_issues)
+            logger.info("[security] LLM review (%s): %d issues", security_model, len(llm_issues))
+        except Exception as e:
+            logger.warning("[security] LLM review failed: %s", e)
 
     # Определяем прошёл ли скан
     critical_count = sum(1 for i in all_issues if i.severity == "critical")

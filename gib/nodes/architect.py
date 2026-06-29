@@ -52,7 +52,7 @@ def _build_architect_prompt(state: GibState) -> str:
         content = file_contents.get(path, "")
         if not content:
             continue
-        preview = content[:10000]
+        preview = content[:6000 if state.get("metadata", {}).get("free_mode") else 10000]
         if len(content) > 10000:
             preview += f"\n\n... [обрезано, всего {len(content)} символов]"
         file_context += f"\n### {path}\n```\n{preview}\n```\n"

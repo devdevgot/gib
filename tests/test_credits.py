@@ -1,7 +1,7 @@
 """Tests for OpenRouter credit error detection."""
 import pytest
 
-from gib.providers.errors import CreditsExhaustedError, is_credits_error
+from gib.providers.errors import CreditsExhaustedError, is_credits_error, is_rate_limit_error
 
 
 def test_is_credits_error_402():
@@ -20,3 +20,8 @@ def test_credits_exhausted_error_attributes():
     err = CreditsExhaustedError("no credits", status_code=402, details={"x": 1})
     assert err.status_code == 402
     assert err.details == {"x": 1}
+
+
+def test_is_rate_limit_error():
+    assert is_rate_limit_error(429, {"error": "Rate limit exceeded"})
+    assert not is_rate_limit_error(429, {"error": "Insufficient credits balance"})

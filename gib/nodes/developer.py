@@ -68,7 +68,7 @@ def _build_developer_prompt(state: GibState) -> str:
         content = file_contents.get(path, "")
         if not content:
             continue
-        preview = content[:12000]
+        preview = content[:6000 if state.get("metadata", {}).get("free_mode") else 12000]
         if len(content) > 12000:
             preview += f"\n\n... [обрезано на 12000 символов, полный файл {len(content)} символов]"
         file_context += f"\n### {path}\n```\n{preview}\n```\n"

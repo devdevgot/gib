@@ -141,6 +141,9 @@ async def _llm_select_files(
     candidates: list[str],
     project_context: dict,
     session_context: str = "",
+    *,
+    model: str | None = None,
+    max_files: int = 40,
 ) -> list[str]:
     """LLM выбирает топ релевантных файлов."""
     from gib.config.loader import get_config
@@ -148,7 +151,7 @@ async def _llm_select_files(
     client = container.openrouter_client()
 
     from gib.providers import ChatMessage
-    _model = get_config().models.cheap or "deepseek/deepseek-v3.2"
+    _model = model or get_config().models.cheap or "deepseek/deepseek-v3.2"
 
     all_files_str = _summarize_file_list(all_files, candidates)
     candidates_str = "\n".join(candidates) if candidates else "(не найдено)"
@@ -168,7 +171,7 @@ async def _llm_select_files(
 ## Файлы проекта
 {all_files_str}
 
-Выбери наиболее релевантные файлы. Верни ТОЛЬКО JSON-массив путей."""
+Выбери наиболее релевантные файлы (не более {max_files}). Верни ТОЛЬКО JSON-массив путей."""
 
     resp = await client.chat(
         [
@@ -189,12 +192,12 @@ async def _llm_select_files(
     if m:
         try:
             paths = json.loads(m.group(0))
-            return [p for p in paths if isinstance(p, str)]
+            return [p for p in paths if isinstance(p, str)][:max_files]
         except json.JSONDecodeError:
             pass
 
     logger.warning("[file_finder] LLM вернул неверный JSON, используем кандидатов")
-    return candidates[:40]
+    return candidates[:max_files]
 
 
 def _read_files(root: Path, rel_paths: list[str], max_bytes: int = 100_000) -> dict[str, str]:
@@ -229,6 +232,12 @@ async def node_file_finder(state: GibState) -> dict:
     existing_contents: dict[str, str] = dict(state.get("file_contents", {}))
     session_context = state.get("session_context", "")
 
+    meta = state.get("metadata", {})
+    free_mode = bool(meta.get("free_mode"))
+    max_files = int(meta.get("file_finder_max_files", 40 if not free_mode else 8))
+    max_bytes = int(meta.get("file_finder_max_bytes", 100_000 if not free_mode else 6000))
+    finder_model = state.get("selected_models", {}).get("file_finder")
+
     logger.info("[file_finder] Ищу релевантные файлы в %s", root)
 
     # Явные target_paths — context_builder уже загрузил нужное
@@ -254,7 +263,13 @@ async def node_file_finder(state: GibState) -> dict:
             candidates.append(path)
 
     relevant = await _llm_select_files(
-        task, all_files, candidates, ctx, session_context=session_context,
+        task,
+        all_files,
+        candidates,
+        ctx,
+        session_context=session_context,
+        model=finder_model,
+        max_files=max_files,
     )
     logger.info("[file_finder] LLM выбрал: %d файлов", len(relevant))
 
@@ -269,10 +284,10 @@ async def node_file_finder(state: GibState) -> dict:
         for c in candidates:
             if c not in valid:
                 valid.append(c)
-        valid = valid[:40]
+        valid = valid[:max_files]
 
     # Merge: сохраняем полный скан + обновляем выбранные файлы с большим лимитом
-    upgraded = _read_files(root, valid, max_bytes=100_000)
+    upgraded = _read_files(root, valid, max_bytes=max_bytes)
     merged_contents = {**existing_contents, **upgraded}
 
     # relevant_files — приоритет для агентов; git-changed идут первыми
@@ -282,7 +297,7 @@ async def node_file_finder(state: GibState) -> dict:
             priority.append(p)
 
     return {
-        "relevant_files": priority[:40],
+        "relevant_files": priority[:max_files],
         "file_contents": merged_contents,
         "logs": [
             f"[FileFinder] {len(priority)} priority files, "

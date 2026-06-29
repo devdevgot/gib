@@ -37,3 +37,10 @@ def is_credits_error(status_code: int, body: Any) -> bool:
     if status_code in (400, 403, 429) and any(kw in text for kw in _CREDIT_KEYWORDS):
         return True
     return False
+
+
+def is_rate_limit_error(status_code: int, body: Any) -> bool:
+    """Detect rate limit (429) that is not a billing/credits error."""
+    if status_code != 429:
+        return False
+    return not is_credits_error(status_code, body)
