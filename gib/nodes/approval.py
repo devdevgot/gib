@@ -1,37 +1,30 @@
-"""Node: Human Approval — показывает diff и запрашивает подтверждение.
-
-Использует Rich для красивого отображения.
-"""
+"""Node: Human Approval — показывает diff и запрашивает подтверждение."""
 from __future__ import annotations
 
-from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Confirm
 from rich.syntax import Syntax
 from rich.table import Table
-from rich import print as rprint
 
 from gib.core.state import GibState
 from gib.core.types import ApprovalStatus, PatchFile
 from gib.utils import get_logger
+from gib.utils.console import console
+from gib.utils.theme import BORDER, BORDER_BRIGHT, ERROR, GREEN, TEXT_DIM, WARNING
 
 logger = get_logger("gib.nodes.approval")
-console = Console()
 
 
 def _render_diff(diff: str, max_lines: int = 60) -> None:
-    """Отображает diff с подсветкой."""
     if not diff:
         return
     lines = diff.splitlines()
     if len(lines) > max_lines:
         diff = "\n".join(lines[:max_lines]) + f"\n... [ещё {len(lines) - max_lines} строк]"
-    syntax = Syntax(diff, "diff", theme="monokai", line_numbers=False)
-    console.print(syntax)
+    console.print(Syntax(diff, "diff", theme="monokai", line_numbers=False, background_color="#0D1117"))
 
 
 def _render_approval_panel(state: GibState) -> None:
-    """Отображает полную информацию для одобрения."""
     patch_files: list[PatchFile] = state.get("patch_files", [])
     summary = state.get("approval_summary", "")
     cost = state.get("total_cost_usd", 0.0)
@@ -41,76 +34,67 @@ def _render_approval_panel(state: GibState) -> None:
     review = state.get("review_result", "")[:500]
     warnings = state.get("warnings", [])
 
-    # Заголовок
-    console.rule("[bold yellow]GIB — Проверка изменений[/bold yellow]")
+    console.rule(f"[bold {GREEN}]проверка изменений[/]", style=BORDER_BRIGHT)
 
-    # Warnings
     for w in warnings:
-        rprint(f"[red]{w}[/red]")
+        console.print(f"[warning]⚠[/] {w}")
 
-    # Метрики в таблице
     metrics = Table(show_header=False, box=None, padding=(0, 2))
-    metrics.add_column("Key", style="dim")
-    metrics.add_column("Value", style="bold")
-    metrics.add_row("Модели", " → ".join(models[-5:]) if models else "—")
-    metrics.add_row("Стоимость", f"${cost:.5f}")
-    metrics.add_row("Время", f"{latency / 1000:.1f}с")
-    metrics.add_row("Файлы", str(len(patch_files)))
+    metrics.add_column(style=f"dim {TEXT_DIM}")
+    metrics.add_column(style="bold")
+    metrics.add_row("модели", " → ".join(models[-5:]) if models else "—")
+    metrics.add_row("стоимость", f"[dim]{GREEN}${cost:.5f}[/]")
+    metrics.add_row("время", f"{latency / 1000:.1f}с")
+    metrics.add_row("файлы", str(len(patch_files)))
     if security_issues:
         critical = sum(1 for i in security_issues if i.severity == "critical")
         metrics.add_row(
-            "Безопасность",
-            f"[red]{len(security_issues)} проблем (критических: {critical})[/red]"
-            if critical else
-            f"[yellow]{len(security_issues)} проблем[/yellow]"
+            "безопасность",
+            f"[error]{len(security_issues)} проблем (критических: {critical})[/]"
+            if critical
+            else f"[warning]{len(security_issues)} проблем[/]",
         )
     console.print(metrics)
     console.print()
 
-    # Список файлов
     if patch_files:
-        console.print(Panel(summary, title="[bold]Файлы для изменения[/bold]", border_style="blue"))
+        console.print(Panel(
+            summary,
+            title=f"[bold {GREEN}]●[/] [bold] Файлы[/]",
+            border_style=BORDER,
+        ))
         console.print()
 
-        # Diff первых 3 файлов
         for pf in patch_files[:3]:
-            console.print(f"[bold cyan]── {pf.path}[/bold cyan]")
+            console.print(f"[bold {GREEN}]▸[/] [bold]{pf.path}[/]")
             _render_diff(pf.diff, max_lines=30)
             console.print()
 
         if len(patch_files) > 3:
-            console.print(f"[dim]... и ещё {len(patch_files) - 3} файлов[/dim]\n")
+            console.print(f"[dim {TEXT_DIM}]... и ещё {len(patch_files) - 3} файлов[/]\n")
 
-    # Краткое ревью
     if review:
         console.print(Panel(
             review,
-            title="[bold]Итог ревью[/bold]",
-            border_style="green",
+            title=f"[bold {GREEN}]●[/] [bold] Ревью[/]",
+            border_style=BORDER_BRIGHT,
         ))
 
 
 async def node_approval(state: GibState) -> dict:
-    """
-    LangGraph Node: Human-in-the-loop одобрение изменений.
-    
-    Показывает diff и ждёт Yes/No от пользователя.
-    """
+    """LangGraph Node: Human-in-the-loop одобрение изменений."""
     _render_approval_panel(state)
 
-    # Проверяем критические уязвимости
     critical_issues = [
         i for i in state.get("security_issues", [])
         if i.severity == "critical"
     ]
 
     if critical_issues:
-        console.print(
-            f"\n[red bold]⛔ ЗАБЛОКИРОВАНО: {len(critical_issues)} критических проблем безопасности![/red bold]"
-        )
+        console.print(f"\n[error]⛔ ЗАБЛОКИРОВАНО: {len(critical_issues)} критических проблем[/]")
         for issue in critical_issues:
-            console.print(f"  [red]• {issue.file}:{issue.line} — {issue.description}[/red]")
-        console.print("[yellow]Исправьте критические проблемы перед применением.[/yellow]\n")
+            console.print(f"  [error]• {issue.file}:{issue.line} — {issue.description}[/]")
+        console.print(f"[warning]Исправьте критические проблемы перед применением.[/]\n")
 
         return {
             "approval_status": ApprovalStatus.REJECTED.value,
@@ -120,13 +104,12 @@ async def node_approval(state: GibState) -> dict:
 
     auto_apply = bool(state.get("metadata", {}).get("auto_apply"))
     if auto_apply:
-        console.print("\n[dim]Автоприменение включено — изменения будут записаны без подтверждения.[/]\n")
+        console.print(f"\n[dim {TEXT_DIM}]Автоприменение — изменения будут записаны без подтверждения.[/]\n")
         approved = True
     else:
-        # Запрашиваем подтверждение
         try:
             approved = Confirm.ask(
-                "\n[bold]Применить эти изменения?[/bold]",
+                f"\n[bold]Применить эти изменения?[/bold]",
                 default=False,
             )
         except (KeyboardInterrupt, EOFError):
@@ -149,7 +132,6 @@ async def node_approval(state: GibState) -> dict:
 
 
 def route_after_approval(state: GibState) -> str:
-    """Conditional edge: применить или пропустить изменения."""
     status = state.get("approval_status", ApprovalStatus.PENDING.value)
     if status == ApprovalStatus.APPROVED.value:
         return "apply"

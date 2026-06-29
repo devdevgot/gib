@@ -4,6 +4,7 @@ GIB entrypoint wrapper.
 Маршрутизация:
   gib улучши страницу дашборда     →  gib ask "улучши страницу дашборда"
   gib -y добавь кнопку экспорта    →  gib ask "добавь кнопку экспорта" --yes
+  gib пушни / мержни main          →  gib git "пушни"
   gib review / fix / ...           →  как есть
 """
 from __future__ import annotations
@@ -12,7 +13,7 @@ import sys
 
 _SUBCOMMANDS = {
     "review", "fix", "refactor", "commit", "doctor",
-    "explain", "test", "docs", "watch", "chat", "ask", "resume", "set-key", "free",
+    "explain", "test", "docs", "watch", "chat", "ask", "resume", "set-key", "free", "git",
 }
 
 
@@ -33,8 +34,9 @@ def parse_freeform_flags(args: list[str]) -> tuple[list[str], bool]:
 
 
 def build_freeform_argv(argv: list[str]) -> list[str] | None:
-    """Превращает `gib слово1 слово2` в argv для скрытой команды ask."""
+    """Превращает свободный запрос в argv для ask или git."""
     from gib.utils.request import join_prompt_args
+    from gib.git.intent import parse_git_intent
 
     args = argv[1:]
     if not args:
@@ -50,6 +52,12 @@ def build_freeform_argv(argv: list[str]) -> list[str] | None:
     prompt = join_prompt_args(tokens)
     if not prompt:
         return None
+
+    if parse_git_intent(prompt):
+        new_argv = [argv[0], "git", prompt]
+        if auto_yes:
+            new_argv.append("--yes")
+        return new_argv
 
     new_argv = [argv[0], "ask", prompt]
     if auto_yes:
