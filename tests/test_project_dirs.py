@@ -1,10 +1,12 @@
 """Tests for per-project .gib data directories."""
+import sqlite3
 from pathlib import Path
 
 from gib.utils.project_dirs import (
     checkpoint_db_path,
     cleanup_legacy_global_databases,
     ensure_gitignore,
+    find_writable_db_path,
     log_dir_path,
     memory_db_path,
     project_data_dir,
@@ -269,3 +271,45 @@ def test_memory_store_adds_gitignore(tmp_path):
 
     MemoryStore(project_root=project)
     assert (project / ".gitignore").read_text(encoding="utf-8").count(".gib/") >= 1
+
+
+def test_find_writable_db_path_returns_preferred_when_usable(tmp_path):
+    project = tmp_path / "repo"
+    project.mkdir()
+    preferred = project / ".gib" / "memory.db"
+
+    result = find_writable_db_path(preferred, "memory.db", project)
+    assert result == preferred.expanduser()
+    assert sqlite3.connect(str(result)) is not None
+
+
+def test_find_writable_db_path_falls_back_when_preferred_blocked(tmp_path, monkeypatch):
+    project = tmp_path / "repo"
+    project.mkdir()
+
+    blocked_parent = tmp_path / "blocked"
+    blocked_parent.write_text("not-a-dir", encoding="utf-8")
+    preferred = blocked_parent / "memory.db"
+
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr("gib.utils.project_dirs.Path.home", lambda: home)
+
+    result = find_writable_db_path(preferred, "memory.db", project)
+    assert result != preferred
+    assert sqlite3.connect(str(result)) is not None
+    conn = sqlite3.connect(str(result))
+    conn.execute("PRAGMA user_version;")
+    conn.close()
+
+
+def test_find_writable_db_path_rejects_directory_path(tmp_path):
+    project = tmp_path / "repo"
+    project.mkdir()
+    preferred = project / ".gib" / "memory.db"
+    preferred.parent.mkdir(parents=True, exist_ok=True)
+    preferred.mkdir()  # preferred is a directory — must be skipped
+
+    result = find_writable_db_path(preferred, "memory.db", project)
+    assert result != preferred
+    assert not result.is_dir()

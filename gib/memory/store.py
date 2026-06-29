@@ -17,14 +17,13 @@ from sqlalchemy import (
     func,
     select,
 )
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from gib.config import get_config
 from gib.utils import get_logger
 from gib.utils.project_dirs import (
     ensure_project_data_layout,
-    memory_db_path as resolve_memory_db_path,
+    find_writable_db_path,
     sqlalchemy_sqlite_url,
 )
 
@@ -101,32 +100,27 @@ class MemoryStore:
         project_root: Path | str | None = None,
     ) -> None:
         self._engine = None
-        if db_path is None:
-            ensure_project_data_layout(project_root)
-            path = get_config().memory_db_path(project_root)
-        else:
+        if db_path is not None:
             path = Path(db_path).expanduser().resolve()
-
-        try:
             path.parent.mkdir(parents=True, exist_ok=True)
             self._engine = create_engine(sqlalchemy_sqlite_url(path), echo=False)
             Base.metadata.create_all(self._engine)
-        except (OSError, SQLAlchemyError):
-            if db_path is not None:
-                raise
+            self._session_factory = sessionmaker(bind=self._engine)
+            return
 
-            fallback_path = resolve_memory_db_path(project_root).resolve()
-            if fallback_path == path.resolve():
-                raise
-
+        ensure_project_data_layout(project_root)
+        preferred = get_config().memory_db_path(project_root)
+        path = find_writable_db_path(preferred, "memory.db", project_root)
+        if path != preferred:
             logger.warning(
-                "Falling back to per-project memory DB after failing to open %s",
+                "Using fallback memory DB %s (preferred %s was not usable)",
                 path,
+                preferred,
             )
-            fallback_path.parent.mkdir(parents=True, exist_ok=True)
-            self._engine = create_engine(sqlalchemy_sqlite_url(fallback_path), echo=False)
-            Base.metadata.create_all(self._engine)
 
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self._engine = create_engine(sqlalchemy_sqlite_url(path), echo=False)
+        Base.metadata.create_all(self._engine)
         self._session_factory = sessionmaker(bind=self._engine)
 
     # ── Task history ──────────────────────────────────────────────────────────
